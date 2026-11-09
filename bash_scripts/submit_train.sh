@@ -46,7 +46,6 @@ fi
 TOOL=$1
 shift
 
-# the plain ufish environment has a CPU-only PyTorch (for Windows)
 if [ "$TOOL" = "ufish" ]; then
     PIXI_ENV="ufish-gpu"
 else
@@ -59,7 +58,6 @@ echo "[INFO] Starting training job $SLURM_JOB_ID"
 echo "[INFO] Tool: $TOOL (pixi environment: $PIXI_ENV)"
 echo "[INFO] Arguments: $*"
 
-# Run training in the tool's own environment
 pixi run -e "$PIXI_ENV" python src/spot_detection_benchmark/train.py \
     --tool "$TOOL" \
     "$@"

@@ -1,11 +1,15 @@
+from __future__ import annotations
+
 import argparse
 import logging
 from pathlib import Path
+from typing import Any
 
 import tifffile
 
 from spot_detection_benchmark.detectors import (
     TOOLS,
+    Detector,
     detect,
     make_detector,
     resolve_model,
@@ -22,27 +26,54 @@ from spot_detection_benchmark.utils import (
 log = logging.getLogger(__name__)
 
 
-def predict_folder(detector, images, mode, threshold, output_dir, cache=None):
+def predict_folder(
+    detector: Detector,
+    images: list[Path],
+    mode: str,
+    threshold: float | None,
+    output_dir: str | Path,
+) -> None:
+    """Detect the spots of each image and write one CSV per image.
+
+    Args:
+        detector: detector built by make_detector.
+        images: TIFF images to predict.
+        mode: "2d", "2d_stack" or "3d".
+        threshold: detection threshold. None: the detector's default.
+        output_dir: where <image stem>.csv files are written (created if needed).
+    """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     for tif in images:
-        image = (
-            cache[tif] if cache is not None and tif in cache else tifffile.imread(tif)
-        )
-        spots = detect(detector, image, mode, threshold)
+        spots = detect(detector, tifffile.imread(tif), mode, threshold)
         spots.to_csv(output_dir / f"{tif.stem}.csv", index=False)
 
 
 def run_inference(
-    tool,
-    input_dir,
-    output_root,
-    mode,
-    model_path=None,
-    threshold=None,
-    pretrained=False,
-    detector_kwargs=None,
-):
+    tool: str,
+    input_dir: str | Path,
+    output_root: str | Path,
+    mode: str,
+    model_path: str | Path | None = None,
+    threshold: float | None = None,
+    pretrained: bool = False,
+    detector_kwargs: dict[str, Any] | None = None,
+) -> Path:
+    """Run a tool on a folder of images and write one CSV per image, plus run_info.json.
+
+    Args:
+        tool: tool name.
+        input_dir: folder of .tif images.
+        output_root: the CSVs go to <output_root>/results_<tool>[_pretrained].
+        mode: "2d", "2d_stack" or "3d".
+        model_path: model to use. Default: the tool's model in models.yaml.
+        threshold: detection threshold. Default: the tool's default threshold.
+        pretrained: without model_path, use the tool's pretrained model.
+        detector_kwargs: settings of the detector class (see make_detector).
+
+    Returns:
+        Folder of the CSVs.
+    """
     output_dir = Path(output_root) / results_dirname(tool, pretrained)
     if any(output_dir.glob("*.csv")):
         raise FileExistsError(
@@ -82,13 +113,13 @@ def run_inference(
     return output_dir
 
 
-def add_detection_args(parser):
-    g = parser.add_argument_group("detection mode and 3D parameters (see docs/modes_and_3d.md)")
+def add_detection_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    g = parser.add_argument_group("detection mode and 3D parameters")
     g.add_argument(
         "--mode",
         choices=MODES,
         default="2d",
-        help="2d: (y, x) images; 2d_stack: (n, y, x) independent planes; "
+        help="2d: (y, x) images; 2d_stack: (n, y, x) independent planes. "
         "3d: (z, y, x) volumes",
     )
     g.add_argument(
@@ -116,25 +147,25 @@ def add_detection_args(parser):
         "--merge_search_range",
         type=float,
         default=None,
-        help="deepBlink 3D z merge (trackpy.link search_range): max (y, x) distance in px between planes of a spot. Default: 2",
+        help="deepBlink 3D z merge: max (y, x) distance in px between planes of a spot. Default: 2",
     )
     g.add_argument(
         "--merge_max_gap",
         type=int,
         default=None,
-        help="deepBlink 3D z merge (trackpy.link memory): missing planes allowed inside a spot. Default: 0",
+        help="deepBlink 3D z merge: missing planes allowed inside a spot. Default: 0",
     )
     g.add_argument(
         "--merge_min_planes",
         type=int,
         default=None,
-        help="deepBlink 3D z merge (trackpy.filter_stubs threshold): spots seen on at least this many planes are reduced to their brightest plane, shorter ones are kept as they are. Default: 2",
+        help="deepBlink 3D z merge: spots seen on at least this many planes are reduced to their brightest plane, shorter ones are kept as they are. Default: 2",
     )
     g.add_argument(
         "--mass_radius",
         type=int,
         default=None,
-        help="deepBlink 3D z merge (trackpy.refine_com radius): disk radius in px used to measure spot brightness. Default: 3",
+        help="deepBlink 3D z merge: disk radius in px used to measure spot brightness. Default: 3",
     )
     g.add_argument(
         "--no_ufish_blend_3d",
@@ -144,7 +175,16 @@ def add_detection_args(parser):
     return parser
 
 
-def detector_kwargs_from_args(tool, args):
+def detector_kwargs_from_args(tool: str, args: argparse.Namespace) -> dict[str, Any]:
+    """Detector settings given on the command line, for make_detector.
+
+    Args:
+        tool: tool name. Only this tool's settings are kept.
+        args: parsed arguments of add_detection_args.
+
+    Returns:
+        Keyword arguments of the tool's detector class.
+    """
     kwargs = {}
     if tool == "log":
         kwargs = given_options(
@@ -164,7 +204,7 @@ def detector_kwargs_from_args(tool, args):
     return kwargs
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Run inference using a specified tool on input images."
     )
@@ -184,9 +224,7 @@ def main():
         "--threshold",
         type=float,
         default=None,
-        help="Detection threshold. Omit to use the tool's default: 0.5 for deepblink, "
-        "piscis and ufish, the model's thresholds.yaml for spotiflow, 20 for log "
-        "(h-maxima height in grey levels).",
+        help="Detection threshold. Omit to use the tool's default.",
     )
     parser.add_argument(
         "--pretrained",

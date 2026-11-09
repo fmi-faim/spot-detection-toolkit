@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import argparse
 import logging
 import random
@@ -21,7 +23,20 @@ log = logging.getLogger(__name__)
 SPLITS = ("train", "val", "test")
 
 
-def list_pairs(images_dir, csv_dir=None):
+def list_pairs(
+    images_dir: str | Path, csv_dir: str | Path | None = None
+) -> list[tuple[Path, Path]]:
+    """Images that have a spot CSV of the same name.
+
+    Images without CSV are skipped with a warning.
+
+    Args:
+        images_dir: folder of .tif images.
+        csv_dir: folder of the CSVs. Default: images_dir.
+
+    Returns:
+        (image, CSV) pairs, sorted by image.
+    """
     csv_dir = Path(csv_dir or images_dir)
     pairs = []
     for image in list_images(images_dir):
@@ -33,7 +48,23 @@ def list_pairs(images_dir, csv_dir=None):
     return pairs
 
 
-def assign_splits(pairs, val_fraction=0.15, test_fraction=0.05, seed=42):
+def assign_splits(
+    pairs: list[tuple[Path, Path]],
+    val_fraction: float = 0.15,
+    test_fraction: float = 0.05,
+    seed: int = 42,
+) -> dict[tuple[Path, Path], str]:
+    """Assign each pair to train, val or test, stratified by image type.
+
+    Args:
+        pairs: (image, CSV) pairs.
+        val_fraction: fraction of each image type in val.
+        test_fraction: fraction of each image type in test.
+        seed: random seed.
+
+    Returns:
+        Split name of each pair.
+    """
     by_type = defaultdict(list)
     for pair in pairs:
         by_type[subset_of(pair[0].stem)].append(pair)
@@ -56,14 +87,28 @@ def assign_splits(pairs, val_fraction=0.15, test_fraction=0.05, seed=42):
 
 
 def split_dataset(
-    images_dir,
-    csv_dir,
-    output_dir,
-    val_fraction=0.15,
-    test_fraction=0.05,
-    seed=42,
-    dry_run=False,
-):
+    images_dir: str | Path,
+    csv_dir: str | Path | None,
+    output_dir: str | Path,
+    val_fraction: float = 0.15,
+    test_fraction: float = 0.05,
+    seed: int = 42,
+    dry_run: bool = False,
+) -> pd.DataFrame:
+    """Copy the images and their CSVs to output_dir/{train,val,test} and write split.csv.
+
+    Args:
+        images_dir: folder of .tif images.
+        csv_dir: folder of the CSVs. None: images_dir.
+        output_dir: where the split is written; must be empty or missing.
+        val_fraction: fraction of each image type in val.
+        test_fraction: fraction of each image type in test.
+        seed: random seed.
+        dry_run: only log the per-type counts and does not create datasets.
+
+    Returns:
+        One row per image: image, subset, split.
+    """
     output_dir = Path(output_dir)
     if not dry_run and output_dir.exists() and any(output_dir.iterdir()):
         raise FileExistsError(
@@ -98,7 +143,15 @@ def split_dataset(
     return table
 
 
-def to_piscis(split_dir, output_dir):
+def to_piscis(split_dir: str | Path, output_dir: str | Path) -> None:
+    """Convert a split to the Piscis layout: {train,val,test}/x/*.tif and y/*.csv.
+
+    The y/ CSVs hold the (y, x) columns only, without header.
+
+    Args:
+        split_dir: folder made by split_dataset.
+        output_dir: Piscis dataset folder; must be empty or missing.
+    """
     split_dir, output_dir = Path(split_dir), Path(output_dir)
     if output_dir.exists() and any(output_dir.iterdir()):
         raise FileExistsError(
@@ -118,7 +171,16 @@ def to_piscis(split_dir, output_dir):
     log.info(f"Piscis dataset written to {output_dir}")
 
 
-def to_deepblink(split_dir, output_path):
+def to_deepblink(split_dir: str | Path, output_path: str | Path) -> None:
+    """Convert a split to a deepBlink .npz dataset.
+
+    The .npz holds x_train, y_train, x_valid, y_valid, x_test and y_test:
+    the images of each split stacked, and one (n, 2) array of spots per image.
+
+    Args:
+        split_dir: folder made by split_dataset.
+        output_path: path of the .npz file.
+    """
     split_dir = Path(split_dir)
     arrays = {}
     for split, npz_name in zip(SPLITS, ("train", "valid", "test")):
@@ -129,7 +191,7 @@ def to_deepblink(split_dir, output_path):
             raise ValueError(
                 f"deepBlink needs images of one size, {split}/ has {sorted(shapes)}"
             )
-        spots = np.empty(len(pairs), dtype=object)  # one (n, 2) array per image
+        spots = np.empty(len(pairs), dtype=object)
         for i, (_, csv) in enumerate(pairs):
             spots[i] = load_coords(csv).reshape(-1, 2)
         arrays[f"x_{npz_name}"] = np.array(images)
@@ -141,7 +203,7 @@ def to_deepblink(split_dir, output_path):
     log.info(f"deepBlink dataset written to {output_path}")
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Build the reference split and each tool's training dataset."
     )

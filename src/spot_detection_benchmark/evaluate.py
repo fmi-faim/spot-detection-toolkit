@@ -3,7 +3,9 @@ from __future__ import annotations
 import argparse
 import logging
 import warnings
+from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -40,7 +42,21 @@ PER_IMAGE_COLUMNS = [
 ]
 
 
-def axis_scale(ndim, voxel_size=None, stack=False):
+def axis_scale(
+    ndim: int, voxel_size: Sequence[float] | None = None, stack: bool = False
+) -> np.ndarray:
+    """Per-axis factors applied to the coordinates before matching.
+
+    Args:
+        ndim: number of axes of the coordinates (2 or 3).
+        voxel_size: (z, y, x) voxel size, any unit. In 3D, z and y are rescaled
+            to x pixels. Ignored if None or if stack is True.
+        stack: the first axis is the plane of independent 2D images: it is
+            multiplied by STACK_PLANE_SCALE so spots of different planes never match.
+
+    Returns:
+        Scale factors, shape (ndim,). Ones in 2D.
+    """
     scale = np.ones(ndim)
     if ndim == 3:
         if stack:
@@ -51,21 +67,51 @@ def axis_scale(ndim, voxel_size=None, stack=False):
     return scale
 
 
-def unmatched_stems(gt_dir, pred_dir):
+def unmatched_stems(
+    gt_dir: str | Path, pred_dir: str | Path
+) -> tuple[list[str], list[str]]:
+    """Images found in only one of the two CSV folders.
+
+    Args:
+        gt_dir: folder of ground-truth CSVs.
+        pred_dir: folder of prediction CSVs.
+
+    Returns:
+        (stems with a ground truth but no prediction, stems with a prediction
+        but no ground truth), both sorted.
+    """
     gt = {g.stem for g in Path(gt_dir).glob("*.csv")}
     pred = {p.stem for p in Path(pred_dir).glob("*.csv")}
     return sorted(gt - pred), sorted(pred - gt)
 
 
 def score_image(
-    pred,
-    true,
-    voxel_size=None,
-    stack=False,
-    cutoff=CUTOFF,
-    mdist=MDIST,
-    n_cutoffs=N_CUTOFFS,
-):
+    pred: np.ndarray,
+    true: np.ndarray,
+    voxel_size: Sequence[float] | None = None,
+    stack: bool = False,
+    cutoff: float = CUTOFF,
+    mdist: float = MDIST,
+    n_cutoffs: int = N_CUTOFFS,
+) -> dict[str, float]:
+    """Metrics of one image's predictions against its ground truth.
+
+    Predictions and ground-truth spots are matched one to one (Hungarian
+    algorithm) when closer than cutoff.
+
+    Args:
+        pred: predicted coordinates, shape (N, D).
+        true: ground-truth coordinates, shape (M, D).
+        voxel_size: (z, y, x) voxel size, used in 3D (see axis_scale).
+        stack: coordinates are (plane, y, x) of independent 2D planes.
+        cutoff: matching distance in px for TP / FP / FN.
+        mdist: upper bound of the F1-integral in px.
+        n_cutoffs: number of distances of the F1-integral.
+
+    Returns:
+        TP, FP, FN, precision, recall, f1, f1_integral, distance_error (mean
+        distance of the matched pairs, NaN without match), n_pred and n_true.
+    """
     ndim = max(
         np.asarray(pred).shape[-1] if np.size(pred) else 0,
         np.asarray(true).shape[-1] if np.size(true) else 0,
@@ -108,7 +154,25 @@ def score_image(
     }
 
 
-def evaluate_folder(gt_dir, pred_dir, voxel_size=None, stack=False, **kwargs):
+def evaluate_folder(
+    gt_dir: str | Path,
+    pred_dir: str | Path,
+    voxel_size: Sequence[float] | None = None,
+    stack: bool = False,
+    **kwargs: Any,
+) -> pd.DataFrame:
+    """Score every prediction CSV that has a ground-truth CSV of the same name.
+
+    Args:
+        gt_dir: folder of ground-truth CSVs.
+        pred_dir: folder of prediction CSVs.
+        voxel_size: (z, y, x) voxel size, used in 3D.
+        stack: CSVs are (plane, y, x) of independent 2D planes.
+        **kwargs: cutoff, mdist or n_cutoffs, passed to score_image.
+
+    Returns:
+        One row per image, columns PER_IMAGE_COLUMNS (empty if nothing scored).
+    """
     rows = []
     for pcsv in sorted(Path(pred_dir).glob("*.csv")):
         gcsv = Path(gt_dir) / pcsv.name
@@ -126,7 +190,29 @@ def evaluate_folder(gt_dir, pred_dir, voxel_size=None, stack=False, **kwargs):
     return pd.DataFrame(rows)[PER_IMAGE_COLUMNS]
 
 
-def summarize(per_image, by=("subset",), min_true=MIN_TRUE, add_all=True):
+def summarize(
+    per_image: pd.DataFrame,
+    by: Sequence[str] = ("subset",),
+    min_true: int = MIN_TRUE,
+    add_all: bool = True,
+) -> pd.DataFrame:
+    """Aggregate the per-image metrics by group.
+
+    Images with fewer than min_true ground-truth spots are left out. Means
+    are per image; precision_pooled and recall_pooled pool the TP / FP / FN
+    of all the images of a group.
+
+    Args:
+        per_image: output of evaluate_folder (with a threshold column if
+            grouped by threshold).
+        by: columns to group by.
+        min_true: images with fewer ground-truth spots are left out.
+        add_all: if "subset" is in by, add rows with subset "ALL" over all the
+            image types.
+
+    Returns:
+        One row per group (empty if no image is left).
+    """
     scored = per_image[per_image["n_true"] >= min_true]
     if scored.empty:
         return pd.DataFrame()
@@ -165,14 +251,30 @@ def summarize(per_image, by=("subset",), min_true=MIN_TRUE, add_all=True):
 
 
 def evaluate(
-    gt_dir,
-    pred_dir,
-    output_dir,
-    voxel_size=None,
-    stack=False,
-    min_true=MIN_TRUE,
-    **kwargs,
-):
+    gt_dir: str | Path,
+    pred_dir: str | Path,
+    output_dir: str | Path,
+    voxel_size: Sequence[float] | None = None,
+    stack: bool = False,
+    min_true: int = MIN_TRUE,
+    **kwargs: Any,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Score a prediction folder and write metrics_per_image.csv and metrics_per_subset.csv.
+
+    Images found in only one of the two folders are listed in a warning.
+
+    Args:
+        gt_dir: folder of ground-truth CSVs.
+        pred_dir: folder of prediction CSVs.
+        output_dir: where the two CSVs are written (created if needed).
+        voxel_size: (z, y, x) voxel size, used in 3D.
+        stack: CSVs are (plane, y, x) of independent 2D planes.
+        min_true: images with fewer ground-truth spots are left out of the summary.
+        **kwargs: cutoff, mdist or n_cutoffs, passed to score_image.
+
+    Returns:
+        (per-image metrics, per-subset summary).
+    """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     per_image = evaluate_folder(gt_dir, pred_dir, voxel_size, stack, **kwargs)
@@ -197,7 +299,7 @@ def evaluate(
     return per_image, summary
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Evaluation metrics of prediction CSVs against ground-truth CSVs"
     )

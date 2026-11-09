@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import argparse
 from pathlib import Path
+from typing import Any
 
 from spot_detection_benchmark.detectors import default_model
 from spot_detection_benchmark.train import (
@@ -10,7 +13,7 @@ from spot_detection_benchmark.train import (
 from spot_detection_benchmark.utils import setup_logging
 
 
-def _check_not_overwritten(base_model, output_dir):
+def _check_not_overwritten(base_model: str | Path, output_dir: str | Path) -> None:
     base = Path(str(base_model))
     if not base.exists():
         return
@@ -23,16 +26,32 @@ def _check_not_overwritten(base_model, output_dir):
 
 
 def finetune(
-    tool,
-    input_dir,
-    output_dir,
-    base_model=None,
-    from_trained=False,
-    epochs=None,
-    lr=None,
-    batch_size=None,
-    **tool_kwargs,
-):
+    tool: str,
+    input_dir: str | Path | None,
+    output_dir: str | Path | None,
+    base_model: str | Path | None = None,
+    from_trained: bool = False,
+    epochs: int | None = None,
+    lr: float | None = None,
+    batch_size: int | None = None,
+    **tool_kwargs: Any,
+) -> None:
+    """Fine-tune an existing model on new data.
+
+    Args:
+        tool: tool name.
+        input_dir: training data (see train).
+        output_dir: where the fine-tuned model is saved. Must not be the base
+            model's folder.
+        base_model: model to fine-tune. Default: the tool's 2D model in models.yaml.
+        from_trained: without base_model, start from the trained model instead
+            of the pretrained one.
+        epochs: number of epochs. Default: the tool's.
+        lr: learning rate. Default: the tool's.
+        batch_size: batch size. Default: the tool's.
+        **tool_kwargs: tool-specific arguments (see train). For piscis, model_name
+            defaults to <base model>_finetuned.
+    """
     if input_dir is None or output_dir is None:
         raise ValueError("fine-tuning requires --input_dir and --output_dir")
     if base_model is None:
@@ -54,7 +73,7 @@ def finetune(
     )
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Fine-tune an existing spot detection model on new data."
     )

@@ -10,7 +10,7 @@
 #SBATCH --output=logs/evaluate-%j.out
 #SBATCH --error=logs/evaluate-%j.err
 
-# Evaluation SLURM Batch Script (CPU only)
+# Evaluation SLURM Batch Script
 # Usage:
 # sbatch bash_scripts/submit_evaluate.sh --gt_dir <dir> --pred_dir <dir> --output_dir <dir> [evaluate.py options...]
 #   options: --mode 2d|2d_stack|3d   --voxel_size Z Y X (3D)   --cutoff 3   --mdist 3   --min_true 1

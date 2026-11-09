@@ -3,7 +3,9 @@ from __future__ import annotations
 import argparse
 import logging
 import shutil
+from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -11,6 +13,7 @@ import tifffile
 
 from spot_detection_benchmark.detectors import (
     TOOLS,
+    Detector,
     detect,
     make_detector,
     resolve_model,
@@ -39,10 +42,6 @@ THRESHOLD_GRIDS = {
     "log": np.unique(np.geomspace(1, 3000, 30).astype(int)).tolist(),
 }
 
-# images are kept in memory between thresholds only below this total size
-DEFAULT_CACHE_GB = 4.0
-
-# column order of the sweep CSV (one row per threshold x image)
 COLUMNS = [
     "threshold",
     "subset",
@@ -60,8 +59,17 @@ COLUMNS = [
 ]
 
 
-def optimal_per_subset(sweep):
-    """Threshold maximising mean F1-integral, for each image type."""
+def optimal_per_subset(sweep: pd.DataFrame) -> pd.DataFrame:
+    """Threshold maximising mean F1-integral, for each image type.
+
+    Args:
+        sweep: per-image metrics with a threshold column (one row per
+            threshold x image).
+
+    Returns:
+        One row per image type: subset, optimal_threshold, f1_integral_mean,
+        precision_mean, recall_mean, n_images.
+    """
     summary = summarize(sweep, by=["threshold", "subset"], add_all=False)
     best_idx = summary.groupby("subset")["f1_integral_mean"].idxmax()
     return summary.loc[
@@ -77,22 +85,41 @@ def optimal_per_subset(sweep):
     ].rename(columns={"threshold": "optimal_threshold"})
 
 
-def _read_images(images, cache_gb):
-    size_gb = sum(p.stat().st_size for p in images) / 1e9
-    if size_gb > cache_gb:
-        log.info(
-            f"images take {size_gb:.1f} GB on disk (> --cache_gb {cache_gb}): "
-            "read from disk at every threshold"
-        )
-        return None
-    return {p: tifffile.imread(p) for p in images}
+def can_filter(detector: Detector, mode: str) -> bool:
+    """Whether the sweep can predict once and filter the spots by score.
 
+    True when keeping the spots with score > t of a prediction at a lower
+    threshold gives the same spots as a prediction at t (see docs/grid_search.md).
 
-def can_filter(detector, mode):
+    Args:
+        detector: detector built by make_detector.
+        mode: "2d", "2d_stack" or "3d".
+
+    Returns:
+        True if mode is in the detector's filter_modes.
+    """
     return mode in getattr(detector, "filter_modes", ())
 
 
-def predict_all_spots(detector, images, mode, threshold, output_dir):
+def predict_all_spots(
+    detector: Detector,
+    images: list[Path],
+    mode: str,
+    threshold: float,
+    output_dir: str | Path,
+) -> dict[str, pd.DataFrame]:
+    """Predict every image once, at the lowest threshold of the sweep.
+
+    Args:
+        detector: detector built by make_detector.
+        images: TIFF images to predict.
+        mode: "2d", "2d_stack" or "3d".
+        threshold: lowest threshold of the sweep.
+        output_dir: where the <image stem>.csv files are written (all_spots/).
+
+    Returns:
+        Spots of each image, by image stem.
+    """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     all_spots = {}
@@ -103,7 +130,22 @@ def predict_all_spots(detector, images, mode, threshold, output_dir):
     return all_spots
 
 
-def write_filtered(all_spots, score_name, threshold, output_dir):
+def write_filtered(
+    all_spots: dict[str, pd.DataFrame],
+    score_name: str,
+    threshold: float,
+    output_dir: str | Path,
+) -> None:
+    """Write, for each image, the spots whose score is above threshold.
+
+    Spots without score (NaN) are kept at every threshold.
+
+    Args:
+        all_spots: output of predict_all_spots.
+        score_name: score column used to filter.
+        threshold: the spots with score > threshold are kept.
+        output_dir: where the <image stem>.csv files are written.
+    """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     for stem, spots in all_spots.items():
@@ -113,18 +155,42 @@ def write_filtered(all_spots, score_name, threshold, output_dir):
 
 
 def grid_search(
-    tool,
-    val_dir,
-    gt_dir,
-    output_root,
-    mode,
-    model_path=None,
-    pretrained=False,
-    thresholds=None,
-    voxel_size=None,
-    detector_kwargs=None,
-    cache_gb=DEFAULT_CACHE_GB,
-):
+    tool: str,
+    val_dir: str | Path,
+    gt_dir: str | Path,
+    output_root: str | Path,
+    mode: str,
+    model_path: str | Path | None = None,
+    pretrained: bool = False,
+    thresholds: Sequence[float] | None = None,
+    voxel_size: Sequence[float] | None = None,
+    detector_kwargs: dict[str, Any] | None = None,
+) -> tuple[dict[str, float], pd.DataFrame] | None:
+    """Sweep a tool's threshold and keep the best one per image type.
+
+    Writes to <output_root>/<tool>[_pretrained]/ the sweep, its summary, the
+    optimal thresholds, the predictions at the optimal threshold of each image
+    type (optimal/) and run_info.json (see docs/grid_search.md).
+
+    Args:
+        tool: tool name.
+        val_dir: folder of .tif images.
+        gt_dir: folder of ground-truth CSVs.
+        output_root: root folder of the results.
+        mode: "2d", "2d_stack" or "3d".
+        model_path: model to use. Default: the tool's model in models.yaml.
+        pretrained: without model_path, use the tool's pretrained model.
+        thresholds: thresholds to try. Default: THRESHOLD_GRIDS[tool].
+        voxel_size: (z, y, x) voxel size, used in 3D to scale z when scoring.
+        detector_kwargs: settings of the detector class (see make_detector).
+
+    Returns:
+        (optimal threshold by image type, per-image sweep), or None if no
+        threshold gave results.
+
+    Raises:
+        FileNotFoundError: no .tif image in val_dir.
+    """
     val_dir = Path(val_dir).resolve()
     gt_dir = Path(gt_dir).resolve()
     output_root = Path(output_root).resolve()
@@ -162,10 +228,8 @@ def grid_search(
             shutil.rmtree(all_spots_dir, ignore_errors=True)
         log.info(f"[{tag}] predicting every image once at threshold={lowest}")
         all_spots = predict_all_spots(detector, images, mode, lowest, all_spots_dir)
-    else:
-        cache = _read_images(images, cache_gb)
 
-    def predict_at(threshold):
+    def predict_at(threshold: float) -> Path:
         if tmp_dir.exists():
             shutil.rmtree(tmp_dir, ignore_errors=True)
         if sweep_method == "filter":
@@ -176,7 +240,6 @@ def grid_search(
                 images,
                 mode,
                 output_dir=tmp_dir / subdir,
-                cache=cache,
                 threshold=threshold,
             )
         return tmp_dir / subdir
@@ -286,7 +349,8 @@ def grid_search(
     return best_by_subset, sweep
 
 
-def main():
+def main() -> None:
+    """Command-line entry point (see docs/arguments.md)."""
     parser = argparse.ArgumentParser(
         description="Grid search over detection thresholds on images with ground truth."
     )
@@ -317,13 +381,6 @@ def main():
         default=None,
         help="Thresholds to try (default: THRESHOLD_GRIDS[tool])",
     )
-    parser.add_argument(
-        "--cache_gb",
-        type=float,
-        default=DEFAULT_CACHE_GB,
-        help="Keep the images in memory between thresholds when they take less "
-        f"than this many GB on disk (default {DEFAULT_CACHE_GB})",
-    )
     add_detection_args(parser)
     args = parser.parse_args()
     setup_logging()
@@ -339,7 +396,6 @@ def main():
         thresholds=args.thresholds,
         voxel_size=args.voxel_size,
         detector_kwargs=detector_kwargs_from_args(args.tool, args),
-        cache_gb=args.cache_gb,
     )
 
 

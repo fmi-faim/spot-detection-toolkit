@@ -1,9 +1,3 @@
-"""Small helpers shared by several modules.
-
-This module imports no detection tool and no yaml, so that every pixi environment
-(the default one included, where evaluate.py and make_datasets.py run) can import it.
-"""
-
 from __future__ import annotations
 
 import datetime
@@ -11,6 +5,7 @@ import json
 import logging
 import os
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -23,17 +18,28 @@ MODES = ["2d", "2d_stack", "3d"]
 IMAGE_EXTS = {".tif", ".tiff"}
 
 
-def setup_logging(level=logging.INFO):
+def setup_logging(level: int = logging.INFO) -> None:
     logging.basicConfig(level=level, format="%(message)s")
 
 
-def get_device():
+def get_device() -> str:
     import torch
 
     return "cuda" if torch.cuda.is_available() else "cpu"
 
 
-def set_piscis_dir(piscis_dir=None):
+def set_piscis_dir(piscis_dir: str | Path | None = None) -> tuple[Path, Path]:
+    """Point Piscis to a folder holding its models/ and checkpoints/ folders.
+
+    Piscis reads these folders from module constants. They are overwritten in
+    every Piscis module that uses them. Both folders are created if needed.
+
+    Args:
+        piscis_dir: Piscis folder. Default: $PISCIS_DIR, else models/piscis.
+
+    Returns:
+        (models folder, checkpoints folder).
+    """
     import piscis.convert
     import piscis.core
     import piscis.downloads
@@ -62,7 +68,15 @@ def set_piscis_dir(piscis_dir=None):
     return models_dir, checkpoints_dir
 
 
-def given_options(**options):
+def given_options(**options: Any) -> dict[str, Any]:
+    """Keep only the options that were given.
+
+    Args:
+        **options: option values, None meaning "not given".
+
+    Returns:
+        The options whose value is not None.
+    """
     kept = {}
     for name, value in options.items():
         if value is not None:
@@ -70,15 +84,24 @@ def given_options(**options):
     return kept
 
 
-def list_images(folder):
+def list_images(folder: str | Path) -> list[Path]:
     return sorted(p for p in Path(folder).iterdir() if p.suffix.lower() in IMAGE_EXTS)
 
 
-def subset_of(stem):
+def subset_of(stem: str) -> str:
     return stem.split("_")[0]
 
 
-def load_coords(csv):
+def load_coords(csv: str | Path) -> np.ndarray:
+    """Read the spot coordinates of a CSV.
+
+    Args:
+        csv: CSV with one axis-k column per axis.
+
+    Returns:
+        Coordinates, shape (N, D), columns in axis order.
+
+    """
     df = pd.read_csv(csv, float_precision="round_trip")
     cols = sorted(
         (c for c in df.columns if c.startswith("axis-")),
@@ -89,12 +112,30 @@ def load_coords(csv):
     return df[cols].to_numpy(float) if len(df) else np.empty((0, len(cols)))
 
 
-def results_dirname(tool, pretrained=False):
+def results_dirname(tool: str, pretrained: bool = False) -> str:
+    """Name of the folder holding a tool's prediction CSVs.
+
+    Args:
+        tool: tool name.
+        pretrained: whether the tool's pretrained model is used.
+
+    Returns:
+        "results_<tool>", or "results_<tool>_pretrained".
+    """
     name = f"results_{tool}"
     return f"{name}_pretrained" if pretrained else name
 
 
-def write_run_info(output_dir, **info):
+def write_run_info(output_dir: str | Path, **info: Any) -> Path:
+    """Write the settings of a run, with the date, to output_dir/run_info.json.
+
+    Args:
+        output_dir: folder of the run's results.
+        **info: settings to record.
+
+    Returns:
+        Path of the JSON file.
+    """
     info = {
         **info,
         "date": datetime.datetime.now().isoformat(timespec="seconds"),

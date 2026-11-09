@@ -20,18 +20,13 @@ def compute_lateral_sigma(
     Uses Abbe's lateral resolution limit d = wavelength / (2 * NA) as the
     full width at half maximum of the spot.
 
-    Parameters
-    ----------
-    wavelength :
-        Emission wavelength.
-    NA :
-        Numerical aperture.
-    lateral_spacing :
-        Pixel size in YX, same unit as `wavelength`.
+    Args:
+        wavelength: Emission wavelength.
+        NA: Numerical aperture.
+        lateral_spacing: Pixel size in YX, same unit as `wavelength`.
 
-    Returns
-    -------
-    Sigma in pixels.
+    Returns:
+        Sigma in pixels.
     """
     return wavelength / (2 * NA) / FWHM_TO_SIGMA / lateral_spacing
 
@@ -47,20 +42,15 @@ def compute_axial_sigma(
     Uses the widefield axial resolution d_z = 2 * wavelength * n / NA**2 as the
     full width at half maximum of the spot (a confocal PSF is ~1.4x narrower).
 
-    Parameters
-    ----------
-    wavelength :
-        Emission wavelength.
-    NA :
-        Numerical aperture.
-    axial_spacing :
-        Z step between planes, same unit as `wavelength`.
-    refractive_index :
-        Refractive index of the immersion medium (1.0 air, 1.33 water, 1.515 oil).
+    Args:
+        wavelength: Emission wavelength.
+        NA: Numerical aperture.
+        axial_spacing: Z step between planes, same unit as `wavelength`.
+        refractive_index: Refractive index of the immersion medium (1.0 air,
+            1.33 water, 1.515 oil).
 
-    Returns
-    -------
-    Sigma in planes.
+    Returns:
+        Sigma in planes.
     """
     return 2 * wavelength * refractive_index / NA**2 / FWHM_TO_SIGMA / axial_spacing
 
@@ -72,14 +62,11 @@ def estimate_log_rescale_factor(sigmas: tuple[float, ...]) -> float:
     After rescaling, the LoG response at the centre of a Gaussian spot with
     the given sigmas equals the spot amplitude in the input image.
 
-    Parameters
-    ----------
-    sigmas :
-        Sigmas used in the LoG filter, one per image axis.
+    Args:
+        sigmas: Sigmas used in the LoG filter, one per image axis.
 
-    Returns
-    -------
-    Rescale factor.
+    Returns:
+        Rescale factor.
     """
     size = int(max(sigmas) * 7)
     ndim = len(sigmas)
@@ -106,25 +93,17 @@ def detect_spots(
     spots of a given size. These detections are intensity filtered with
     a h-maxima filter.
 
-    Parameters
-    ----------
-    img :
-        Image containing spot signal, axes (Z, Y, X).
-    axial_sigma :
-        Z extension of the spots, in pixels.
-    lateral_sigma :
-        YX extension of the spots, in pixels.
-    h :
-        h-maxima threshold, in the intensity unit of `img`.
-    background_img :
-        Estimated background image. This is subtracted before the
-        spot detection.
-    mask :
-        Foreground mask to restrict the spot detection.
+    Args:
+        img: Image containing spot signal, axes (Z, Y, X).
+        axial_sigma: Z extension of the spots, in pixels.
+        lateral_sigma: YX extension of the spots, in pixels.
+        h: h-maxima threshold, in the intensity unit of `img`.
+        background_img: Estimated background image. This is subtracted before
+            the spot detection.
+        mask: Foreground mask to restrict the spot detection.
 
-    Returns
-    -------
-    Detected spots, shape (N, 3), columns (z, y, x).
+    Returns:
+        Detected spots, shape (N, 3), columns (z, y, x).
     """
     image = (
         img_as_float32(img) - img_as_float32(background_img)
@@ -160,23 +139,16 @@ def detect_spots_2d(
     spots of a given size. These detections are intensity filtered with
     a h-maxima filter.
 
-    Parameters
-    ----------
-    img :
-        Image containing spot signal, axes (Y, X).
-    lateral_sigma :
-        YX extension of the spots, in pixels.
-    h :
-        h-maxima threshold, in the intensity unit of `img`.
-    background_img :
-        Estimated background image. This is subtracted before the
-        spot detection.
-    mask :
-        Foreground mask to restrict the spot detection.
+    Args:
+        img: Image containing spot signal, axes (Y, X).
+        lateral_sigma: YX extension of the spots, in pixels.
+        h: h-maxima threshold, in the intensity unit of `img`.
+        background_img: Estimated background image. This is subtracted before
+            the spot detection.
+        mask: Foreground mask to restrict the spot detection.
 
-    Returns
-    -------
-    Detected spots, shape (N, 2), columns (y, x).
+    Returns:
+        Detected spots, shape (N, 2), columns (y, x).
     """
     image = (
         img_as_float32(img) - img_as_float32(background_img)

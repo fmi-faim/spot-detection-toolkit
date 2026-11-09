@@ -48,7 +48,6 @@ fi
 TOOL=$1
 shift
 
-# the plain ufish environment has a CPU-only PyTorch (for Windows)
 if [ "$TOOL" = "ufish" ]; then
     PIXI_ENV="ufish-gpu"
 else

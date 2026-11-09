@@ -17,9 +17,8 @@
 #
 # Every option of grid_search.py is passed through (python src/spot_detection_benchmark/grid_search.py -h):
 #   --model <path|name>   --pretrained   --thresholds t1 t2 ...
-#   --mode 2d|2d_stack|3d    --voxel_size Z Y X   --cache_gb 4   (and the detection options of run_inference.py)
+#   --mode 2d|2d_stack|3d    --voxel_size Z Y X   (and the detection options of run_inference.py)
 #
-# Choose the thresholds on the val split, report the benchmark on test.
 # Examples:
 #   sbatch bash_scripts/submit_grid_search.sh piscis --val_dir datasets/train_val_test_split/val --gt_dir datasets/train_val_test_split/val --output_root results/results_grid_search_ufish_dataset
 #   sbatch bash_scripts/submit_grid_search.sh deepblink --val_dir datasets/train_val_test_split/val --gt_dir datasets/train_val_test_split/val --output_root results/results_grid_search_ufish_dataset --pretrained
@@ -48,7 +47,6 @@ fi
 TOOL=$1
 shift
 
-# the plain ufish environment has a CPU-only PyTorch (for Windows)
 if [ "$TOOL" = "ufish" ]; then
     PIXI_ENV="ufish-gpu"
 else

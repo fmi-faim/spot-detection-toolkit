@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 import argparse
 import logging
 import shutil
 from pathlib import Path
+from typing import Any
 
 from spot_detection_benchmark.utils import (
     get_device,
@@ -17,7 +20,7 @@ DEFAULT_PISCIS_INPUT_SIZE = (512, 512)
 DEFAULT_UFISH_HPARAMS = {"lr": 1e-4, "batch_size": 16, "num_epochs": 200}
 
 
-def _log_gpu(tool):
+def _log_gpu(tool: str) -> None:
     if tool == "deepblink":
         import tensorflow as tf
 
@@ -30,7 +33,7 @@ def _log_gpu(tool):
     log.info(f"[{tool}] training on {'GPU' if on_gpu else 'CPU'}")
 
 
-def _get_values(dct):
+def _get_values(dct: dict[str, Any]) -> dict[str, Any]:
     return {
         k: v["value"] if isinstance(v, dict) and "value" in v else _get_values(v)
         for k, v in dct.items()
@@ -38,14 +41,27 @@ def _get_values(dct):
 
 
 def train_deepblink(
-    config,
-    input_dir=None,
-    output_dir=None,
-    epochs=None,
-    lr=None,
-    batch_size=None,
-    base_model=None,
-):
+    config: str | Path | None,
+    input_dir: str | Path | None = None,
+    output_dir: str | Path | None = None,
+    epochs: int | None = None,
+    lr: float | None = None,
+    batch_size: int | None = None,
+    base_model: str | Path | None = None,
+) -> None:
+    """Train a deepBlink model from a deepBlink configuration YAML.
+
+    The other arguments, when given, override the configuration.
+
+    Args:
+        config: deepBlink configuration YAML.
+        input_dir: .npz dataset (made by make_datasets.py deepblink).
+        output_dir: folder where the model is saved.
+        epochs: number of epochs.
+        lr: learning rate.
+        batch_size: batch size.
+        base_model: .h5 model to start from for fine-tuning.
+    """
     if config is None:
         raise ValueError("deepblink requires --config")
 
@@ -72,8 +88,23 @@ def train_deepblink(
 
 
 def train_spotiflow(
-    input_dir, output_dir, epochs=None, lr=None, batch_size=None, base_model=None
-):
+    input_dir: str | Path | None,
+    output_dir: str | Path | None,
+    epochs: int | None = None,
+    lr: float | None = None,
+    batch_size: int | None = None,
+    base_model: str | Path | None = None,
+) -> None:
+    """Train a Spotiflow model.
+
+    Args:
+        input_dir: folder with train/ and val/ (images and CSVs).
+        output_dir: model folder.
+        epochs: number of epochs. Default: Spotiflow's.
+        lr: learning rate. Default: Spotiflow's.
+        batch_size: batch size. Default: Spotiflow's.
+        base_model: Spotiflow model folder to start from for fine-tuning.
+    """
     if input_dir is None or output_dir is None:
         raise ValueError("spotiflow requires --input_dir and --output_dir")
 
@@ -105,14 +136,28 @@ def train_spotiflow(
 
 
 def train_piscis(
-    input_dir,
-    output_dir=None,
-    model_name=None,
-    epochs=None,
-    lr=None,
-    batch_size=None,
-    base_model=None,
-):
+    input_dir: str | Path | None,
+    output_dir: str | Path | None = None,
+    model_name: str | None = None,
+    epochs: int | None = None,
+    lr: float | None = None,
+    batch_size: int | None = None,
+    base_model: str | None = None,
+) -> None:
+    """Train a Piscis model.
+
+    Args:
+        input_dir: folder with train/, val/ and test/, each with x/ and y/
+            (made by make_datasets.py piscis).
+        output_dir: Piscis folder holding models/ and checkpoints/. Default:
+            $PISCIS_DIR, else models/piscis, the only folder inference loads
+            Piscis models from.
+        model_name: name of the trained model. Default: DEFAULT_PISCIS_MODEL_NAME.
+        epochs: number of epochs. Default: Piscis's.
+        lr: learning rate. Default: Piscis's.
+        batch_size: batch size. Default: Piscis's.
+        base_model: name of the Piscis model to start from for fine-tuning.
+    """
     if input_dir is None:
         raise ValueError("piscis requires --input_dir")
     model_name = model_name or DEFAULT_PISCIS_MODEL_NAME
@@ -124,8 +169,6 @@ def train_piscis(
 
     from piscis.training import train_model
 
-    # Piscis looks for the base model in its models folder: when it lives in the
-    # default folder and output_dir is another one, copy it there first
     default_models_dir, _ = set_piscis_dir()
     models_dir, checkpoints_dir = set_piscis_dir(output_dir)
     if base_model is not None:
@@ -152,14 +195,26 @@ def train_piscis(
 
 
 def train_ufish(
-    input_dir,
-    val_dir,
-    output_dir,
-    epochs=None,
-    lr=None,
-    batch_size=None,
-    base_model=None,
-):
+    input_dir: str | Path | None,
+    val_dir: str | Path | None,
+    output_dir: str | Path | None,
+    epochs: int | None = None,
+    lr: float | None = None,
+    batch_size: int | None = None,
+    base_model: str | Path | None = None,
+) -> None:
+    """Train a U-FISH model.
+
+    Args:
+        input_dir: training folder (images and CSVs).
+        val_dir: validation folder (images and CSVs).
+        output_dir: folder where the .pth weights and the TensorBoard logs
+            are saved.
+        epochs: number of epochs. Default: DEFAULT_UFISH_HPARAMS.
+        lr: learning rate. Default: DEFAULT_UFISH_HPARAMS.
+        batch_size: batch size. Default: DEFAULT_UFISH_HPARAMS.
+        base_model: .pth weights to start from for fine-tuning.
+    """
     if input_dir is None or val_dir is None or output_dir is None:
         raise ValueError("ufish requires --input_dir, --val_dir and --output_dir")
     if base_model is not None and not str(base_model).endswith(".pth"):
@@ -179,7 +234,7 @@ def train_ufish(
 
     ufish = UFish()
     if base_model is not None:
-        ufish.load_weights_from_path(str(base_model))  # train() then starts from it
+        ufish.load_weights_from_path(str(base_model))
     ufish.train(
         input_dir,
         val_dir,
@@ -200,15 +255,28 @@ TOOLS = list(TRAINERS)
 
 
 def train(
-    tool,
-    input_dir=None,
-    output_dir=None,
-    epochs=None,
-    lr=None,
-    batch_size=None,
-    base_model=None,
-    **tool_kwargs,
-):
+    tool: str,
+    input_dir: str | Path | None = None,
+    output_dir: str | Path | None = None,
+    epochs: int | None = None,
+    lr: float | None = None,
+    batch_size: int | None = None,
+    base_model: str | Path | None = None,
+    **tool_kwargs: Any,
+) -> None:
+    """Train a tool's model, from scratch or from base_model.
+
+    Args:
+        tool: tool name, a key of TRAINERS.
+        input_dir: training data (see the tool's train_* function).
+        output_dir: where the model is saved (see the tool's train_* function).
+        epochs: number of epochs. Default: the tool's.
+        lr: learning rate. Default: the tool's.
+        batch_size: batch size. Default: the tool's.
+        base_model: model to start from for fine-tuning.
+        **tool_kwargs: tool-specific arguments: config (deepblink), model_name
+            (piscis), val_dir (ufish).
+    """
     if tool not in TRAINERS:
         raise ValueError(f"Unknown tool: {tool}. Available tools: {TOOLS}")
 
@@ -233,7 +301,16 @@ def train(
     )
 
 
-def tool_kwargs_from_args(tool, args):
+def tool_kwargs_from_args(tool: str, args: argparse.Namespace) -> dict[str, Any]:
+    """Tool-specific training arguments given on the command line.
+
+    Args:
+        tool: tool name.
+        args: parsed arguments of add_training_args.
+
+    Returns:
+        config for deepblink, model_name for piscis, val_dir for ufish, else {}.
+    """
     if tool == "deepblink":
         return {"config": args.config}
     if tool == "piscis":
@@ -243,7 +320,9 @@ def tool_kwargs_from_args(tool, args):
     return {}
 
 
-def add_training_args(parser, require_dirs=False):
+def add_training_args(
+    parser: argparse.ArgumentParser, require_dirs: bool = False
+) -> argparse.ArgumentParser:
     parser.add_argument("--tool", required=True, choices=TOOLS)
     parser.add_argument(
         "--input_dir",
@@ -262,8 +341,8 @@ def add_training_args(parser, require_dirs=False):
         help=(
             "Where the model is saved. spotiflow, ufish: the model folder. "
             "deepblink: overrides the config's savedir. piscis: the Piscis folder "
-            "holding models/ and checkpoints/ (default $PISCIS_DIR or models/piscis); "
-            "keep models/piscis, the only folder inference loads Piscis models from."
+            "holding models/ and checkpoints/ (default $PISCIS_DIR or models/piscis)."
+            "Warning: keep models/piscis, the only folder inference loads Piscis models from."
         ),
     )
     parser.add_argument(
@@ -295,7 +374,7 @@ def add_training_args(parser, require_dirs=False):
     return parser
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Train a spot detection model from scratch with the specified tool."
     )

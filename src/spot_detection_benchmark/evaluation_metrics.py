@@ -69,6 +69,9 @@ def f1_integral(
         true: Array of shape (n, d) for ground truth coordinates.
         mdist: Maximum cutoff distance to calculate F1.
         n_cutoffs: Number of intermediate cutoff steps.
+
+    Returns:
+        F1 integral between 0 and 1 (0 if pred or true is empty).
     """
     if pred.size == 0 or true.size == 0:
         warnings.warn(

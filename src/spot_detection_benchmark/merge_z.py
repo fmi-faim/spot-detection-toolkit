@@ -7,28 +7,24 @@ import pandas as pd
 
 
 def merge_z(
-    volume,
-    coords,
-    scores,
-    search_range=2,
-    max_gap=0,
-    min_planes=2,
-    mass_radius=3,
-):
-    """(plane, y, x) detections -> one (z, y, x) per spot (the notebook's df_clean).
+    volume: np.ndarray,
+    coords: np.ndarray,
+    scores: np.ndarray | None,
+    search_range: float = 2,
+    max_gap: int = 0,
+    min_planes: int = 2,
+    mass_radius: int = 3,
+) -> tuple[np.ndarray, np.ndarray | None]:
+    """(plane, y, x) detections -> one (z, y, x) per spot.
 
     Args:
         volume: the (z, y, x) image, used to measure each detection's mass.
         coords: (N, 3) detections, columns (plane, y, x).
         scores: (N,) score of each detection, or None.
-        search_range: max (y, x) distance in px between two planes of a spot
-            (notebook: search_range).
-        max_gap: number of missing planes allowed inside a spot (notebook:
-            gap_frames, trackpy's memory).
-        min_planes: tracks seen on fewer planes are not merged (notebook:
-            min_frames).
-        mass_radius: radius in px of trackpy.refine_com (notebook:
-            radius_refinement).
+        search_range: max (y, x) distance in px between two planes of a spot.
+        max_gap: number of missing planes allowed inside a spot.
+        min_planes: tracks seen on fewer planes are not merged.
+        mass_radius: radius in px of trackpy.refine_com.
 
     Returns:
         (coords (M, 3), scores (M,) or None): each kept detection with its own
