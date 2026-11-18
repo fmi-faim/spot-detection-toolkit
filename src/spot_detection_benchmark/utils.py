@@ -12,8 +12,6 @@ import pandas as pd
 
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-
 MODES = ["2d", "2d_stack", "3d"]
 IMAGE_EXTS = {".tif", ".tiff"}
 
@@ -35,7 +33,8 @@ def set_piscis_dir(piscis_dir: str | Path | None = None) -> tuple[Path, Path]:
     every Piscis module that uses them. Both folders are created if needed.
 
     Args:
-        piscis_dir: Piscis folder. Default: $PISCIS_DIR, else models/piscis.
+        piscis_dir: Piscis folder. Default: $PISCIS_DIR, else Piscis's own
+            folder (~/.piscis).
 
     Returns:
         (models folder, checkpoints folder).
@@ -47,7 +46,7 @@ def set_piscis_dir(piscis_dir: str | Path | None = None) -> tuple[Path, Path]:
     import piscis.training
 
     piscis_dir = Path(
-        piscis_dir or os.environ.get("PISCIS_DIR", REPO_ROOT / "models" / "piscis")
+        piscis_dir or os.environ.get("PISCIS_DIR", Path.home() / ".piscis")
     )
     models_dir = piscis_dir / "models"
     checkpoints_dir = piscis_dir / "checkpoints"
@@ -110,20 +109,6 @@ def load_coords(csv: str | Path) -> np.ndarray:
     if not cols:
         raise ValueError(f"{csv}: no axis-* column")
     return df[cols].to_numpy(float) if len(df) else np.empty((0, len(cols)))
-
-
-def results_dirname(tool: str, pretrained: bool = False) -> str:
-    """Name of the folder holding a tool's prediction CSVs.
-
-    Args:
-        tool: tool name.
-        pretrained: whether the tool's pretrained model is used.
-
-    Returns:
-        "results_<tool>", or "results_<tool>_pretrained".
-    """
-    name = f"results_{tool}"
-    return f"{name}_pretrained" if pretrained else name
 
 
 def write_run_info(output_dir: str | Path, **info: Any) -> Path:

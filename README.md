@@ -1,6 +1,6 @@
 # spot-detection-benchmark
 
-Benchmark and useful codes of five spot detectors for smFISH-like images: **deepBlink**, **Spotiflow**,
+Benchmark and useful codes of four spot detectors for smFISH-like images: **Spotiflow**,
 **Piscis**, **U-FISH** and a classical **LoG** (Laplacian of Gaussian & h-maxima). 
 All algorithms can be used on 2D images, stacks of 2D planes and 3D volumes.
 The steps are :
@@ -40,7 +40,6 @@ scripts.
 | folder | content |
 |---|---|
 | `src/spot_detection_benchmark/` | the code |
-| `models.yaml` | which model each tool uses |
-| `models/` | model weights |
+| `models/` | models trained here (the default models are downloaded by each tool) |
 | `bash_scripts/` | SLURM wrappers and pixi installation |
 | `notebooks/` | analysis notebooks |

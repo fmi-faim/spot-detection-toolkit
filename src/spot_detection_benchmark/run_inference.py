@@ -13,12 +13,12 @@ from spot_detection_benchmark.detectors import (
     detect,
     make_detector,
     resolve_model,
+    results_dirname,
 )
 from spot_detection_benchmark.utils import (
     MODES,
     given_options,
     list_images,
-    results_dirname,
     setup_logging,
     write_run_info,
 )
@@ -56,7 +56,6 @@ def run_inference(
     mode: str,
     model_path: str | Path | None = None,
     threshold: float | None = None,
-    pretrained: bool = False,
     detector_kwargs: dict[str, Any] | None = None,
 ) -> Path:
     """Run a tool on a folder of images and write one CSV per image, plus run_info.json.
@@ -64,28 +63,27 @@ def run_inference(
     Args:
         tool: tool name.
         input_dir: folder of .tif images.
-        output_root: the CSVs go to <output_root>/results_<tool>[_pretrained].
+        output_root: the CSVs go to <output_root>/<results_dirname(tool, model_path)>.
         mode: "2d", "2d_stack" or "3d".
-        model_path: model to use. Default: the tool's model in models.yaml.
+        model_path: model to use (file, folder or name). Default: the tool's
+            default model, downloaded on first use.
         threshold: detection threshold. Default: the tool's default threshold.
-        pretrained: without model_path, use the tool's pretrained model.
         detector_kwargs: settings of the detector class (see make_detector).
 
     Returns:
         Folder of the CSVs.
     """
-    output_dir = Path(output_root) / results_dirname(tool, pretrained)
+    output_dir = Path(output_root) / results_dirname(tool, model_path)
     if any(output_dir.glob("*.csv")):
         raise FileExistsError(
             f"{output_dir} already holds results: choose another --output_root, "
             "or delete that folder to run again"
         )
-    model_path = resolve_model(tool, mode, pretrained, model_path)
+    model_path = resolve_model(tool, mode, model_path)
     detector = make_detector(
         tool,
         mode,
         model_path=model_path,
-        pretrained=pretrained,
         **(detector_kwargs or {}),
     )
     images = list_images(input_dir)
@@ -104,7 +102,6 @@ def run_inference(
         tool=tool,
         mode=mode,
         model=model_path,
-        pretrained=pretrained,
         threshold=used_threshold,
         settings=detector_kwargs or {},
         input_dir=Path(input_dir).resolve(),
@@ -144,30 +141,6 @@ def add_detection_args(parser: argparse.ArgumentParser) -> argparse.ArgumentPars
         help="LoG 3D: axial spot sigma in planes. Default: lateral_sigma * X / Z",
     )
     g.add_argument(
-        "--merge_search_range",
-        type=float,
-        default=None,
-        help="deepBlink 3D z merge: max (y, x) distance in px between planes of a spot. Default: 2",
-    )
-    g.add_argument(
-        "--merge_max_gap",
-        type=int,
-        default=None,
-        help="deepBlink 3D z merge: missing planes allowed inside a spot. Default: 0",
-    )
-    g.add_argument(
-        "--merge_min_planes",
-        type=int,
-        default=None,
-        help="deepBlink 3D z merge: spots seen on at least this many planes are reduced to their brightest plane, shorter ones are kept as they are. Default: 2",
-    )
-    g.add_argument(
-        "--mass_radius",
-        type=int,
-        default=None,
-        help="deepBlink 3D z merge: disk radius in px used to measure spot brightness. Default: 3",
-    )
-    g.add_argument(
         "--no_ufish_blend_3d",
         action="store_true",
         help="U-FISH 3D: do not blend the z/y/x enhancements",
@@ -192,13 +165,6 @@ def detector_kwargs_from_args(tool: str, args: argparse.Namespace) -> dict[str, 
             axial_sigma=args.axial_sigma,
             voxel_size=args.voxel_size,
         )
-    elif tool == "deepblink":
-        kwargs["merge_params"] = given_options(
-            search_range=args.merge_search_range,
-            max_gap=args.merge_max_gap,
-            min_planes=args.merge_min_planes,
-            mass_radius=args.mass_radius,
-        )
     elif tool == "ufish" and args.no_ufish_blend_3d:
         kwargs["blend_3d"] = False
     return kwargs
@@ -213,24 +179,20 @@ def main() -> None:
     parser.add_argument(
         "--output_root",
         required=True,
-        help="Root folder; CSVs go to <output_root>/results_<tool>[_pretrained]",
+        help="Root folder; CSVs go to <output_root>/results_<tool>_default "
+        "(default model), results_<tool>_<model name> (--model) or results_log",
     )
     parser.add_argument(
         "--model",
         default=None,
-        help="Model file, folder or name. Omit to use the tool's model in models.yaml.",
+        help="Model file, folder or name. Omit to use the tool's default model, "
+        "downloaded on first use.",
     )
     parser.add_argument(
         "--threshold",
         type=float,
         default=None,
         help="Detection threshold. Omit to use the tool's default.",
-    )
-    parser.add_argument(
-        "--pretrained",
-        action="store_true",
-        help="Use the tool's pretrained model. Results go to "
-        "results_<tool>_pretrained.",
     )
     add_detection_args(parser)
 
@@ -243,7 +205,6 @@ def main() -> None:
         args.mode,
         model_path=args.model,
         threshold=args.threshold,
-        pretrained=args.pretrained,
         detector_kwargs=detector_kwargs_from_args(args.tool, args),
     )
 

@@ -30,7 +30,6 @@ def finetune(
     input_dir: str | Path | None,
     output_dir: str | Path | None,
     base_model: str | Path | None = None,
-    from_trained: bool = False,
     epochs: int | None = None,
     lr: float | None = None,
     batch_size: int | None = None,
@@ -43,9 +42,8 @@ def finetune(
         input_dir: training data (see train).
         output_dir: where the fine-tuned model is saved. Must not be the base
             model's folder.
-        base_model: model to fine-tune. Default: the tool's 2D model in models.yaml.
-        from_trained: without base_model, start from the trained model instead
-            of the pretrained one.
+        base_model: model to fine-tune (file, folder or name). Default: the
+            tool's default 2D model, downloaded on first use.
         epochs: number of epochs. Default: the tool's.
         lr: learning rate. Default: the tool's.
         batch_size: batch size. Default: the tool's.
@@ -55,7 +53,7 @@ def finetune(
     if input_dir is None or output_dir is None:
         raise ValueError("fine-tuning requires --input_dir and --output_dir")
     if base_model is None:
-        base_model = default_model(tool, "2d", pretrained=not from_trained)
+        base_model = default_model(tool, "2d")
     _check_not_overwritten(base_model, output_dir)
 
     if tool == "piscis" and tool_kwargs.get("model_name") is None:
@@ -82,15 +80,10 @@ def main() -> None:
         "--base_model",
         default=None,
         help=(
-            "Model to fine-tune: deepblink .h5, spotiflow folder, piscis name, "
-            "ufish .pth. Omit to use the tool's pretrained 2D model in models.yaml."
+            "Model to fine-tune: spotiflow folder, piscis name, "
+            "ufish .pth, or a model name of the tool. Omit to use the tool's "
+            "default 2D model, downloaded on first use."
         ),
-    )
-    parser.add_argument(
-        "--from_trained",
-        action="store_true",
-        help="Without --base_model: start from the model trained here (models.yaml "
-        "trained / 2d) instead of the pretrained one.",
     )
     args = parser.parse_args()
     setup_logging()
@@ -100,7 +93,6 @@ def main() -> None:
         args.input_dir,
         args.output_dir,
         base_model=args.base_model,
-        from_trained=args.from_trained,
         epochs=args.epochs,
         lr=args.lr,
         batch_size=args.batch_size,

@@ -1,21 +1,71 @@
 from __future__ import annotations
 
 import logging
-import warnings
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Union
 
 import numpy as np
 import pandas as pd
-import yaml
 
-from spot_detection_benchmark.utils import MODES, REPO_ROOT, get_device, set_piscis_dir
+from spot_detection_benchmark.utils import MODES, get_device, set_piscis_dir
 
 log = logging.getLogger(__name__)
 
-with open(REPO_ROOT / "models.yaml", encoding="utf-8") as f:
-    MODELS = yaml.safe_load(f)
+# Model of each tool when no model is given: the tool's own pretrained model, by
+# name, downloaded on first use into the tool's cache folder. In 3d mode, a tool
+# without a "3d" entry uses its 2D model (see each detector's predict_3d).
+DEFAULT_MODELS = {
+    "spotiflow": {"2d": "general", "3d": "smfish_3d"},
+    "piscis": {"2d": "20251212"},
+    "ufish": {"2d": "v1.0-alldata-ufish_c32.pth"},
+}
+
+def load_spotiflow(
+    model: str | Path, inference_mode: bool = True, map_location: str = "auto"
+) -> Any:
+    """Load a Spotiflow model from its folder or by name.
+
+    Args:
+        model: model folder, or name of a Spotiflow pretrained model (e.g.
+            general, smfish_3d), downloaded once into ~/.spotiflow.
+        inference_mode: False to leave the model trainable.
+        map_location: device.
+
+    Returns:
+        The Spotiflow model.
+    """
+    from spotiflow.model import Spotiflow as SpotiflowModel
+
+    if Path(model).is_dir():
+        return SpotiflowModel.from_folder(
+            model, inference_mode=inference_mode, map_location=map_location
+        )
+    if len(Path(model).parts) > 1:
+        raise FileNotFoundError(f"spotiflow: no model folder {model}")
+    return SpotiflowModel.from_pretrained(
+        str(model), inference_mode=inference_mode, map_location=map_location
+    )
+
+
+def load_ufish_weights(ufish: Any, model: str | Path) -> None:
+    """Load PyTorch weights into a U-FISH model.
+
+    Args:
+        ufish: ufish.api.UFish instance.
+        model: .pth file, or name of a .pth file of U-FISH's HuggingFace
+            repository (e.g. v1.0-alldata-ufish_c32.pth), downloaded once into
+            ~/.ufish.
+
+    Raises:
+        ValueError: model is not a .pth model.
+    """
+    if not str(model).endswith(".pth"):
+        raise ValueError(f"ufish: {model} is not a PyTorch .pth model")
+    if Path(model).is_file():
+        ufish.load_weights_from_path(str(model))
+    else:
+        ufish.load_weights_from_internet(weights_file=str(model))
 
 
 def _sanitize_h(threshold: float, image: np.ndarray) -> int:
@@ -88,18 +138,6 @@ def _predict_stack(
     if not coords:
         return np.empty((0, 3)), (None if scores is None else np.empty((0,)))
     return np.vstack(coords), (None if scores is None else np.hstack(scores))
-
-
-def _predict_planes_and_merge(
-    detector: Detector,
-    volume: np.ndarray,
-    threshold: float,
-    merge_params: dict[str, Any] | None = None,
-) -> tuple[np.ndarray, np.ndarray | None]:
-    from spot_detection_benchmark.merge_z import merge_z
-
-    coords, scores = _predict_stack(detector, volume, threshold)
-    return merge_z(volume, coords, scores, **(merge_params or {}))
 
 
 class LoG:
@@ -176,67 +214,6 @@ class LoG:
         return coords, None
 
 
-class DeepBlink:
-    """deepBlink detector.
-
-    The threshold is the minimum probability of a spot. Each spot's score is
-    its probability. In 3D, each plane is predicted in 2D and the detections
-    are merged along z with trackpy, as in the deepBlink notebook (see merge_z adn deeBlink's github).
-
-    Args:
-        model_path: deepBlink .h5 model.
-        merge_params: 3D only, keyword arguments of merge_z (search_range,
-            max_gap, min_planes, mass_radius).
-    """
-
-    score_name = "probability"
-    default_threshold = 0.5
-    filter_modes = ("2d", "2d_stack")
-
-    def __init__(
-        self, model_path: str | Path, merge_params: dict[str, Any] | None = None
-    ) -> None:
-        from deepblink.io import load_model
-
-        self.model = load_model(str(model_path))
-        self.merge_params = merge_params
-
-    def predict_2d(
-        self, image: np.ndarray, threshold: float
-    ) -> tuple[np.ndarray, np.ndarray | None]:
-        """Detect the spots of a 2D image.
-
-        Args:
-            image: (y, x) image.
-            threshold: minimum probability of a spot.
-
-        Returns:
-            (coordinates (N, 2), probabilities (N,) or None).
-        """
-        from deepblink.inference import predict
-
-        coords = predict(image=image, model=self.model, probability=threshold)
-        if coords.ndim == 2 and coords.shape[1] > 2:
-            return coords[:, :2], coords[:, 2]
-        return coords.reshape(-1, 2), None
-
-    def predict_3d(
-        self, volume: np.ndarray, threshold: float
-    ) -> tuple[np.ndarray, np.ndarray | None]:
-        """Detect the spots of each plane, then merge them along z.
-
-        Args:
-            volume: (z, y, x) volume.
-            threshold: minimum probability of a spot.
-
-        Returns:
-            (coordinates (N, 3), probabilities (N,) or None).
-        """
-        return _predict_planes_and_merge(
-            self, volume, threshold, merge_params=self.merge_params
-        )
-
-
 class Piscis:
     """Piscis detector.
 
@@ -245,19 +222,24 @@ class Piscis:
     the tile padding).
 
     Args:
-        model_path: name of a model of models/piscis/models.
+        model_path: model name, looked for in the Piscis folder (see
+            set_piscis_dir); a name missing there is downloaded from Piscis's
+            online models. Default: DEFAULT_MODELS.
     """
 
     score_name = "confidence"
     default_threshold = 0.5
     filter_modes = ("2d", "2d_stack")
 
-    def __init__(self, model_path: str | Path) -> None:
+    def __init__(self, model_path: str | None = None) -> None:
         set_piscis_dir()
 
         from piscis import Piscis as PiscisModel
 
-        self.model = PiscisModel(model_name=model_path, device=get_device())
+        self.model = PiscisModel(
+            model_name=str(model_path or DEFAULT_MODELS["piscis"]["2d"]),
+            device=get_device(),
+        )
 
     def predict_2d(
         self, image: np.ndarray, threshold: float
@@ -305,7 +287,8 @@ class UFish:
     score is that Laplacian at the spot.
 
     Args:
-        model_path: U-FISH .pth weights.
+        model_path: U-FISH .pth weights, or name of U-FISH online weights (see
+            load_ufish_weights). Default: DEFAULT_MODELS.
         blend_3d: 3D only, blend the enhancements along z, y and x.
     """
 
@@ -313,14 +296,14 @@ class UFish:
     default_threshold = 0.5
     filter_modes = ("2d", "2d_stack", "3d")
 
-    def __init__(self, model_path: str | Path, blend_3d: bool = True) -> None:
+    def __init__(
+        self, model_path: str | Path | None = None, blend_3d: bool = True
+    ) -> None:
         from ufish.api import UFish as UFishModel
 
-        if not str(model_path).endswith(".pth"):
-            raise ValueError(f"ufish: {model_path} is not a PyTorch .pth model")
         self.blend_3d = blend_3d
         self.model = UFishModel()
-        self.model.load_weights_from_path(str(model_path))
+        load_ufish_weights(self.model, model_path or DEFAULT_MODELS["ufish"]["2d"])
         on_gpu = self.model.cuda
 
         log.info(f"[ufish] model loaded on {'GPU' if on_gpu else 'CPU'}")
@@ -379,19 +362,19 @@ class Spotiflow:
     its probability. The default threshold is the model's own (thresholds.yaml).
 
     Args:
-        model_path: Spotiflow model folder.
+        model_path: Spotiflow model folder, or name of a Spotiflow pretrained
+            model (see load_spotiflow). Default: DEFAULT_MODELS (2D model).
     """
 
     score_name = "probability"
     default_threshold = None
-    needs_3d_model = True
     filter_modes = ("2d", "2d_stack", "3d")
 
-    def __init__(self, model_path: str | Path) -> None:
-        from spotiflow.model import Spotiflow as SpotiflowModel
-
+    def __init__(self, model_path: str | Path | None = None) -> None:
         self.device = get_device()
-        self.model = SpotiflowModel.from_folder(model_path, map_location=self.device)
+        self.model = load_spotiflow(
+            model_path or DEFAULT_MODELS["spotiflow"]["2d"], map_location=self.device
+        )
         self.default_threshold = float(np.ravel(self.model._prob_thresh)[0])
 
     def predict_2d(
@@ -443,7 +426,6 @@ class Spotiflow:
 
 DETECTORS = {
     "log": LoG,
-    "deepblink": DeepBlink,
     "spotiflow": Spotiflow,
     "piscis": Piscis,
     "ufish": UFish,
@@ -451,89 +433,79 @@ DETECTORS = {
 
 TOOLS = list(DETECTORS)
 
-Detector = Union[LoG, DeepBlink, Piscis, UFish, Spotiflow]
+Detector = Union[LoG, Piscis, UFish, Spotiflow]
 
 
-def _model_in_yaml(training_type: str, dim: str, tool: str) -> str | None:
-    return (MODELS[training_type].get(dim) or {}).get(tool)
-
-
-def _full_path(model_path: str) -> Path | str:
-    path = REPO_ROOT / model_path
-    return path if path.exists() else model_path
-
-
-def default_model(tool: str, mode: str, pretrained: bool = False) -> Path | str:
-    """Model of a tool in models.yaml.
-
-    In 3D mode, a tool without a 3D model uses its 2D model (predicted plane by
-    plane), except Spotiflow, which needs a 3D model and falls back on the
-    pretrained 3D model (with a warning).
+def default_model(tool: str, mode: str) -> str | None:
+    """Name of a tool's default model (DEFAULT_MODELS).
 
     Args:
         tool: tool name.
-        mode: "2d", "2d_stack" or "3d".
-        pretrained: look in the pretrained section instead of the trained one.
+        mode: "2d", "2d_stack" or "3d". In 3d mode, the 3D model if the tool
+            has one, else its 2D model.
 
     Returns:
-        Path from the repository root if it exists, else the value of models.yaml.
+        The model name, or None for a tool without model (LoG).
     """
-    training_type = "pretrained" if pretrained else "trained"
-    searched = f"{training_type} / {'3d' if mode == '3d' else '2d'}"
-
-    if mode != "3d":
-        model = _model_in_yaml(training_type, "2d", tool)
-    else:
-        model = _model_in_yaml(training_type, "3d", tool)
-        needs_3d = getattr(DETECTORS[tool], "needs_3d_model", False)
-        if model is None and not needs_3d:
-            model = _model_in_yaml(training_type, "2d", tool)
-            searched += " and 2d"
-        if model is None and needs_3d and training_type == "trained":
-            model = _model_in_yaml("pretrained", "3d", tool)
-            searched += ", then pretrained / 3d"
-            if model is not None:
-                warnings.warn(
-                    f"{tool}: no trained 3D model in models.yaml, "
-                    f"using the pretrained one: {model}"
-                )
-
-    if model is None:
-        raise ValueError(
-            f"{tool}: no model in models.yaml for mode {mode} (searched {searched})"
-        )
-    return _full_path(model)
+    models = DEFAULT_MODELS.get(tool)
+    if models is None:
+        return None
+    return models.get("3d", models["2d"]) if mode == "3d" else models["2d"]
 
 
 def resolve_model(
-    tool: str,
-    mode: str,
-    pretrained: bool = False,
-    model_path: str | Path | None = None,
+    tool: str, mode: str, model_path: str | Path | None = None
 ) -> str | Path | None:
     """Model a run will use.
 
     Args:
         tool: tool name.
         mode: "2d", "2d_stack" or "3d".
-        pretrained: without model_path, use the tool's pretrained model.
         model_path: model given by the user, returned as is.
 
     Returns:
-        model_path, else the tool's model in models.yaml. None for a tool
-        without mode.
+        model_path, else the tool's default model. None for a tool without
+        model.
     """
     if not getattr(DETECTORS[tool], "needs_model", True):
         return None
+    return model_path if model_path is not None else default_model(tool, mode)
+
+
+def run_name(tool: str, model_path: str | Path | None = None) -> str:
+    """Name of a run, used for its results folder.
+
+    Args:
+        tool: tool name.
+        model_path: model given by the user; None for the default model.
+
+    Returns:
+        "<tool>" for a tool without model, "<tool>_default" with the default
+        model, else "<tool>_<model file or folder name>".
+    """
+    if not getattr(DETECTORS[tool], "needs_model", True):
+        return tool
     if model_path is None:
-        model_path = default_model(tool, mode, pretrained=pretrained)
-    return model_path
+        return f"{tool}_default"
+    return f"{tool}_{Path(str(model_path)).stem}"
+
+
+def results_dirname(tool: str, model_path: str | Path | None = None) -> str:
+    """Name of the folder holding a run's prediction CSVs: "results_<run_name>".
+
+    Args:
+        tool: tool name.
+        model_path: model given by the user; None for the default model.
+
+    Returns:
+        The folder name.
+    """
+    return f"results_{run_name(tool, model_path)}"
 
 
 def make_detector(
     tool: str,
     mode: str,
-    pretrained: bool = False,
     model_path: str | Path | None = None,
     **kwargs: Any,
 ) -> Detector:
@@ -541,9 +513,9 @@ def make_detector(
 
     Args:
         tool: tool name, a key of DETECTORS.
-        mode: "2d", "2d_stack" or "3d", used to pick the model.
-        pretrained: without model_path, use the tool's pretrained model.
-        model_path: model to load. Default: the tool's model in models.yaml.
+        mode: "2d", "2d_stack" or "3d", used to pick the default model.
+        model_path: model to load (file, folder or name). Default: the tool's
+            default model, downloaded on first use.
         **kwargs: settings of the detector class.
 
     Returns:
@@ -554,7 +526,7 @@ def make_detector(
     if mode not in MODES:
         raise ValueError(f"Unknown mode: {mode}. Available modes: {MODES}")
 
-    model_path = resolve_model(tool, mode, pretrained, model_path)
+    model_path = resolve_model(tool, mode, model_path)
     if model_path is None:
         return DETECTORS[tool](**kwargs)
     return DETECTORS[tool](model_path=model_path, **kwargs)

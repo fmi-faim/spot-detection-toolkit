@@ -7,13 +7,10 @@ import shutil
 from collections import Counter, defaultdict
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
-import tifffile
 
 from spot_detection_benchmark.utils import (
     list_images,
-    load_coords,
     setup_logging,
     subset_of,
 )
@@ -171,38 +168,6 @@ def to_piscis(split_dir: str | Path, output_dir: str | Path) -> None:
     log.info(f"Piscis dataset written to {output_dir}")
 
 
-def to_deepblink(split_dir: str | Path, output_path: str | Path) -> None:
-    """Convert a split to a deepBlink .npz dataset.
-
-    The .npz holds x_train, y_train, x_valid, y_valid, x_test and y_test:
-    the images of each split stacked, and one (n, 2) array of spots per image.
-
-    Args:
-        split_dir: folder made by split_dataset.
-        output_path: path of the .npz file.
-    """
-    split_dir = Path(split_dir)
-    arrays = {}
-    for split, npz_name in zip(SPLITS, ("train", "valid", "test")):
-        pairs = list_pairs(split_dir / split)
-        images = [tifffile.imread(image) for image, _ in pairs]
-        shapes = {image.shape for image in images}
-        if len(shapes) > 1:
-            raise ValueError(
-                f"deepBlink needs images of one size, {split}/ has {sorted(shapes)}"
-            )
-        spots = np.empty(len(pairs), dtype=object)
-        for i, (_, csv) in enumerate(pairs):
-            spots[i] = load_coords(csv).reshape(-1, 2)
-        arrays[f"x_{npz_name}"] = np.array(images)
-        arrays[f"y_{npz_name}"] = spots
-        log.info(f"{split:<6} {len(pairs)} images {shapes.pop() if shapes else ''}")
-
-    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(output_path, **arrays)
-    log.info(f"deepBlink dataset written to {output_path}")
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Build the reference split and each tool's training dataset."
@@ -226,10 +191,6 @@ def main() -> None:
     piscis.add_argument("--split_dir", required=True, help="Folder made by 'split'")
     piscis.add_argument("--output_dir", required=True, help="Piscis dataset folder")
 
-    deepblink = commands.add_parser("deepblink", help="split -> deepBlink .npz")
-    deepblink.add_argument("--split_dir", required=True, help="Folder made by 'split'")
-    deepblink.add_argument("--output", required=True, help="Path of the .npz file")
-
     args = parser.parse_args()
     setup_logging()
     if args.command == "split":
@@ -242,10 +203,8 @@ def main() -> None:
             seed=args.seed,
             dry_run=args.dry_run,
         )
-    elif args.command == "piscis":
-        to_piscis(args.split_dir, args.output_dir)
     else:
-        to_deepblink(args.split_dir, args.output)
+        to_piscis(args.split_dir, args.output_dir)
 
 
 if __name__ == "__main__":

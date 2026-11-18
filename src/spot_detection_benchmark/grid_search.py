@@ -17,6 +17,8 @@ from spot_detection_benchmark.detectors import (
     detect,
     make_detector,
     resolve_model,
+    results_dirname,
+    run_name,
 )
 from spot_detection_benchmark.evaluate import MIN_TRUE, evaluate_folder, summarize
 from spot_detection_benchmark.run_inference import (
@@ -26,7 +28,6 @@ from spot_detection_benchmark.run_inference import (
 )
 from spot_detection_benchmark.utils import (
     list_images,
-    results_dirname,
     setup_logging,
     subset_of,
     write_run_info,
@@ -35,7 +36,6 @@ from spot_detection_benchmark.utils import (
 log = logging.getLogger(__name__)
 
 THRESHOLD_GRIDS = {
-    "deepblink": np.round(np.arange(0.1, 1.05, 0.05), 3).tolist(),
     "spotiflow": np.round(np.arange(0.1, 1.05, 0.05), 3).tolist(),
     "piscis": np.round(np.arange(0.1, 1.25, 0.05), 3).tolist(),
     "ufish": np.round(np.arange(0.1, 1.05, 0.05), 3).tolist(),
@@ -161,14 +161,13 @@ def grid_search(
     output_root: str | Path,
     mode: str,
     model_path: str | Path | None = None,
-    pretrained: bool = False,
     thresholds: Sequence[float] | None = None,
     voxel_size: Sequence[float] | None = None,
     detector_kwargs: dict[str, Any] | None = None,
 ) -> tuple[dict[str, float], pd.DataFrame] | None:
     """Sweep a tool's threshold and keep the best one per image type.
 
-    Writes to <output_root>/<tool>[_pretrained]/ the sweep, its summary, the
+    Writes to <output_root>/<run_name(tool, model_path)>/ the sweep, its summary, the
     optimal thresholds, the predictions at the optimal threshold of each image
     type (optimal/) and run_info.json (see docs/grid_search.md).
 
@@ -178,8 +177,8 @@ def grid_search(
         gt_dir: folder of ground-truth CSVs.
         output_root: root folder of the results.
         mode: "2d", "2d_stack" or "3d".
-        model_path: model to use. Default: the tool's model in models.yaml.
-        pretrained: without model_path, use the tool's pretrained model.
+        model_path: model to use (file, folder or name). Default: the tool's
+            default model, downloaded on first use.
         thresholds: thresholds to try. Default: THRESHOLD_GRIDS[tool].
         voxel_size: (z, y, x) voxel size, used in 3D to scale z when scoring.
         detector_kwargs: settings of the detector class (see make_detector).
@@ -194,17 +193,16 @@ def grid_search(
     val_dir = Path(val_dir).resolve()
     gt_dir = Path(gt_dir).resolve()
     output_root = Path(output_root).resolve()
-    tag = f"{tool}_pretrained" if pretrained else tool
-    subdir = results_dirname(tool, pretrained)
+    tag = run_name(tool, model_path)
+    subdir = results_dirname(tool, model_path)
     eval_kw = dict(
         voxel_size=voxel_size if mode == "3d" else None, stack=mode == "2d_stack"
     )
 
-    model_path = resolve_model(tool, mode, pretrained, model_path)
+    model_path = resolve_model(tool, mode, model_path)
     detector = make_detector(
         tool,
         mode,
-        pretrained=pretrained,
         model_path=model_path,
         **(detector_kwargs or {}),
     )
@@ -335,7 +333,6 @@ def grid_search(
         tool=tool,
         mode=mode,
         model=model_path,
-        pretrained=pretrained,
         thresholds=thresholds,
         sweep_method=sweep_method,
         all_spots_threshold=min(thresholds) if sweep_method == "filter" else None,
@@ -367,12 +364,8 @@ def main() -> None:
     parser.add_argument(
         "--model",
         default=None,
-        help="Model file, folder or name. Omit to use the tool's model in models.yaml.",
-    )
-    parser.add_argument(
-        "--pretrained",
-        action="store_true",
-        help="Sweep the tool's pretrained model instead of the one trained here.",
+        help="Model file, folder or name. Omit to use the tool's default model, "
+        "downloaded on first use.",
     )
     parser.add_argument(
         "--thresholds",
@@ -392,7 +385,6 @@ def main() -> None:
         args.output_root,
         mode=args.mode,
         model_path=args.model,
-        pretrained=args.pretrained,
         thresholds=args.thresholds,
         voxel_size=args.voxel_size,
         detector_kwargs=detector_kwargs_from_args(args.tool, args),

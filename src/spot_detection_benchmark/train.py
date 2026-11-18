@@ -6,6 +6,10 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+from spot_detection_benchmark.detectors import (
+    load_spotiflow,
+    load_ufish_weights,
+)
 from spot_detection_benchmark.utils import (
     get_device,
     given_options,
@@ -21,70 +25,10 @@ DEFAULT_UFISH_HPARAMS = {"lr": 1e-4, "batch_size": 16, "num_epochs": 200}
 
 
 def _log_gpu(tool: str) -> None:
-    if tool == "deepblink":
-        import tensorflow as tf
+    import torch
 
-        on_gpu = bool(tf.config.list_physical_devices("GPU"))
-    else:
-        import torch
-
-        on_gpu = torch.cuda.is_available()
-
+    on_gpu = torch.cuda.is_available()
     log.info(f"[{tool}] training on {'GPU' if on_gpu else 'CPU'}")
-
-
-def _get_values(dct: dict[str, Any]) -> dict[str, Any]:
-    return {
-        k: v["value"] if isinstance(v, dict) and "value" in v else _get_values(v)
-        for k, v in dct.items()
-    }
-
-
-def train_deepblink(
-    config: str | Path | None,
-    input_dir: str | Path | None = None,
-    output_dir: str | Path | None = None,
-    epochs: int | None = None,
-    lr: float | None = None,
-    batch_size: int | None = None,
-    base_model: str | Path | None = None,
-) -> None:
-    """Train a deepBlink model from a deepBlink configuration YAML.
-
-    The other arguments, when given, override the configuration.
-
-    Args:
-        config: deepBlink configuration YAML.
-        input_dir: .npz dataset (made by make_datasets.py deepblink).
-        output_dir: folder where the model is saved.
-        epochs: number of epochs.
-        lr: learning rate.
-        batch_size: batch size.
-        base_model: .h5 model to start from for fine-tuning.
-    """
-    if config is None:
-        raise ValueError("deepblink requires --config")
-
-    import yaml
-    from deepblink.io import load_model
-    from deepblink.training import run_experiment
-
-    with open(config, encoding="utf-8") as f:
-        cfg = _get_values(yaml.safe_load(f))
-
-    if input_dir is not None:
-        cfg["dataset_args"]["name"] = str(input_dir)
-    if output_dir is not None:
-        Path(output_dir).mkdir(parents=True, exist_ok=True)
-        cfg["savedir"] = str(output_dir)
-    cfg["train_args"].update(
-        given_options(epochs=epochs, learning_rate=lr, batch_size=batch_size)
-    )
-    log.info(f"[deepblink] config: {config}")
-    log.info(f"[deepblink] train_args: {cfg['train_args']}")
-
-    pre_model = load_model(str(base_model)) if base_model is not None else None
-    run_experiment(cfg, pre_model=pre_model)
 
 
 def train_spotiflow(
@@ -103,7 +47,8 @@ def train_spotiflow(
         epochs: number of epochs. Default: Spotiflow's.
         lr: learning rate. Default: Spotiflow's.
         batch_size: batch size. Default: Spotiflow's.
-        base_model: Spotiflow model folder to start from for fine-tuning.
+        base_model: Spotiflow model folder or pretrained model name to start
+            from for fine-tuning (see load_spotiflow).
     """
     if input_dir is None or output_dir is None:
         raise ValueError("spotiflow requires --input_dir and --output_dir")
@@ -121,8 +66,8 @@ def train_spotiflow(
         model = Spotiflow()
     else:
         # inference_mode=False: the loaded model is left trainable
-        model = Spotiflow.from_folder(
-            str(base_model), inference_mode=False, map_location=get_device()
+        model = load_spotiflow(
+            base_model, inference_mode=False, map_location=get_device()
         )
         train_config["finetuned_from"] = str(base_model)  # recorded with the model
     model.fit(
@@ -150,8 +95,9 @@ def train_piscis(
         input_dir: folder with train/, val/ and test/, each with x/ and y/
             (made by make_datasets.py piscis).
         output_dir: Piscis folder holding models/ and checkpoints/. Default:
-            $PISCIS_DIR, else models/piscis, the only folder inference loads
-            Piscis models from.
+            $PISCIS_DIR, else Piscis's own folder (~/.piscis), the folder
+            inference loads Piscis models from by name. The model is saved to
+            <output_dir>/models/<model_name>.pt.
         model_name: name of the trained model. Default: DEFAULT_PISCIS_MODEL_NAME.
         epochs: number of epochs. Default: Piscis's.
         lr: learning rate. Default: Piscis's.
@@ -213,7 +159,8 @@ def train_ufish(
         epochs: number of epochs. Default: DEFAULT_UFISH_HPARAMS.
         lr: learning rate. Default: DEFAULT_UFISH_HPARAMS.
         batch_size: batch size. Default: DEFAULT_UFISH_HPARAMS.
-        base_model: .pth weights to start from for fine-tuning.
+        base_model: .pth weights, or name of U-FISH online weights (see
+            load_ufish_weights), to start from for fine-tuning.
     """
     if input_dir is None or val_dir is None or output_dir is None:
         raise ValueError("ufish requires --input_dir, --val_dir and --output_dir")
@@ -234,7 +181,7 @@ def train_ufish(
 
     ufish = UFish()
     if base_model is not None:
-        ufish.load_weights_from_path(str(base_model))
+        load_ufish_weights(ufish, base_model)
     ufish.train(
         input_dir,
         val_dir,
@@ -245,7 +192,6 @@ def train_ufish(
 
 
 TRAINERS = {
-    "deepblink": train_deepblink,
     "spotiflow": train_spotiflow,
     "piscis": train_piscis,
     "ufish": train_ufish,
@@ -274,8 +220,8 @@ def train(
         lr: learning rate. Default: the tool's.
         batch_size: batch size. Default: the tool's.
         base_model: model to start from for fine-tuning.
-        **tool_kwargs: tool-specific arguments: config (deepblink), model_name
-            (piscis), val_dir (ufish).
+        **tool_kwargs: tool-specific arguments: model_name (piscis), val_dir
+            (ufish).
     """
     if tool not in TRAINERS:
         raise ValueError(f"Unknown tool: {tool}. Available tools: {TOOLS}")
@@ -296,9 +242,17 @@ def train(
     )
 
     log.info(f"[{tool}] training complete")
-    log.info(
-        f"[{tool}] to use this model, add it to models.yaml (trained / 2d / {tool})"
-    )
+    if tool == "piscis":
+        log.info(
+            "[piscis] to use this model, give its name with --model (run_inference.py, "
+            "grid_search.py) or --base_model (finetuning.py), with PISCIS_DIR set to "
+            "--output_dir if it is not the default folder"
+        )
+    else:
+        log.info(
+            f"[{tool}] to use this model, give its path with --model (run_inference.py, "
+            "grid_search.py) or --base_model (finetuning.py)"
+        )
 
 
 def tool_kwargs_from_args(tool: str, args: argparse.Namespace) -> dict[str, Any]:
@@ -309,10 +263,8 @@ def tool_kwargs_from_args(tool: str, args: argparse.Namespace) -> dict[str, Any]
         args: parsed arguments of add_training_args.
 
     Returns:
-        config for deepblink, model_name for piscis, val_dir for ufish, else {}.
+        model_name for piscis, val_dir for ufish, else {}.
     """
-    if tool == "deepblink":
-        return {"config": args.config}
     if tool == "piscis":
         return {"model_name": args.model_name}
     if tool == "ufish":
@@ -329,8 +281,7 @@ def add_training_args(
         required=require_dirs,
         default=None,
         help=(
-            "Training data: deepblink=.npz (overrides the config's dataset), "
-            "spotiflow=folder with train/ and val/, piscis=folder with train/, val/ "
+            "Training data: spotiflow=folder with train/ and val/, piscis=folder with train/, val/ "
             "and test/, each with x/ and y/, ufish=training folder."
         ),
     )
@@ -340,16 +291,14 @@ def add_training_args(
         default=None,
         help=(
             "Where the model is saved. spotiflow, ufish: the model folder. "
-            "deepblink: overrides the config's savedir. piscis: the Piscis folder "
-            "holding models/ and checkpoints/ (default $PISCIS_DIR or models/piscis)."
-            "Warning: keep models/piscis, the only folder inference loads Piscis models from."
+            "piscis: the Piscis folder "
+            "holding models/ and checkpoints/ (default $PISCIS_DIR, else ~/.piscis); "
+            "the model is saved to <output_dir>/models/<model_name>.pt. Inference "
+            "loads Piscis models by name from $PISCIS_DIR (else ~/.piscis) only."
         ),
     )
     parser.add_argument(
         "--val_dir", default=None, help="Validation data folder (ufish only)"
-    )
-    parser.add_argument(
-        "--config", default=None, help="Configuration YAML file (deepblink only)"
     )
     parser.add_argument(
         "--model_name",
