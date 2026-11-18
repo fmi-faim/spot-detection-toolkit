@@ -16,9 +16,10 @@
 # sbatch bash_scripts/submit_train.sh <tool> [train.py arguments...]
 #
 # Examples:
-#   sbatch --mem=128G bash_scripts/submit_train.sh deepblink --config <config_file>
 #   sbatch bash_scripts/submit_train.sh spotiflow --input_dir <input_dir> --output_dir <output_dir>
 #   sbatch bash_scripts/submit_train.sh piscis --input_dir <input_dir> [--output_dir <Piscis folder>] [--model_name <name>]
+#     (Piscis saves <output_dir>/models/<model_name>.pt; inference finds it by name with
+#      PISCIS_DIR=<output_dir>, else it looks in ~/.piscis)
 #   sbatch bash_scripts/submit_train.sh ufish --input_dir <train_dir> --val_dir <val_dir> --output_dir <output_dir>
 #
 # Optional for every tool: --epochs, --lr, --batch_size (tool default if omitted)

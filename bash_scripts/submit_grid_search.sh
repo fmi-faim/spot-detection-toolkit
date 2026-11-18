@@ -16,12 +16,14 @@
 # sbatch bash_scripts/submit_grid_search.sh <tool> --val_dir <dir> --gt_dir <dir> --output_root <dir> [grid_search.py options...]
 #
 # Every option of grid_search.py is passed through (python src/spot_detection_benchmark/grid_search.py -h):
-#   --model <path|name>   --pretrained   --thresholds t1 t2 ...
+#   --model <path|name>   --thresholds t1 t2 ...
+# Without --model each tool uses its own pretrained model, downloaded on first use.
+# Results go to <output_root>/<tool>_default/, <tool>_<model name>/ or log/.
 #   --mode 2d|2d_stack|3d    --voxel_size Z Y X   (and the detection options of run_inference.py)
 #
 # Examples:
-#   sbatch bash_scripts/submit_grid_search.sh piscis --val_dir datasets/train_val_test_split/val --gt_dir datasets/train_val_test_split/val --output_root results/results_grid_search_ufish_dataset
-#   sbatch bash_scripts/submit_grid_search.sh deepblink --val_dir datasets/train_val_test_split/val --gt_dir datasets/train_val_test_split/val --output_root results/results_grid_search_ufish_dataset --pretrained
+#   sbatch bash_scripts/submit_grid_search.sh spotiflow --val_dir datasets/train_val_test_split/val --gt_dir datasets/train_val_test_split/val --output_root results/results_grid_search_ufish_dataset
+#   PISCIS_DIR=models/piscis sbatch bash_scripts/submit_grid_search.sh piscis --model piscis_customed_512 --val_dir datasets/train_val_test_split/val --gt_dir datasets/train_val_test_split/val --output_root results/results_grid_search_ufish_dataset
 #   sbatch bash_scripts/submit_grid_search.sh log --val_dir datasets/3d/image --gt_dir datasets/3d/csv --output_root results/results_grid_search_3d --mode 3d --voxel_size 300 100 100
 
 set -eu

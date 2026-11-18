@@ -16,13 +16,15 @@
 # sbatch bash_scripts/submit_run_inference.sh <tool> --input_dir <dir> --output_root <dir> [run_inference.py options...]
 #
 # Every option of run_inference.py is passed through (python src/spot_detection_benchmark/run_inference.py -h):
-#   --model <path|name>   --threshold <value>   --pretrained
+#   --model <path|name>   --threshold <value>
+# Without --model each tool uses its own pretrained model, downloaded on first use.
+# CSVs go to <output_root>/results_<tool>_default/, results_<tool>_<model name>/ or results_log/.
 #   --mode 2d|2d_stack|3d    --voxel_size Z Y X    --lateral_sigma / --axial_sigma (LoG)
-#   --merge_search_range, --merge_min_planes, ... (deepBlink 3D z merge)   --no_ufish_blend_3d
+#   --no_ufish_blend_3d
 #
 # Examples:
 #   sbatch bash_scripts/submit_run_inference.sh spotiflow --input_dir datasets/train_val_test_split/test --output_root results/results_inference_ufish_dataset
-#   sbatch bash_scripts/submit_run_inference.sh ufish --input_dir datasets/train_val_test_split/test --output_root results/results_inference_ufish_dataset --pretrained --threshold 0.4
+#   sbatch bash_scripts/submit_run_inference.sh ufish --input_dir datasets/train_val_test_split/test --output_root results/results_inference_ufish_dataset --model models/ufish/best_model.pth --threshold 0.4
 #   sbatch bash_scripts/submit_run_inference.sh log --input_dir datasets/3d/image --output_root results/inf_3d --mode 3d --voxel_size 300 100 100
 
 set -eu

@@ -15,14 +15,13 @@
 # Usage:
 # sbatch bash_scripts/submit_finetuning.sh <tool> --input_dir <dir> --output_dir <dir> [finetuning.py arguments...]
 #
-# Starts from the tool's pretrained 2D model in models.yaml, or --from_trained (trained one),
-# or --base_model <model>. --input_dir and --output_dir are required.
+# Starts from the tool's default 2D model (downloaded on first use), or from
+# --base_model <model>. --input_dir and --output_dir are required.
 #
 # Examples:
 #   sbatch bash_scripts/submit_finetuning.sh spotiflow --input_dir <data> --output_dir models/spotiflow/general_finetuned --lr 3e-5 --epochs 50
-#   sbatch bash_scripts/submit_finetuning.sh ufish --input_dir <train> --val_dir <val> --output_dir models/ufish/finetuned --from_trained --lr 1e-5
-#   sbatch bash_scripts/submit_finetuning.sh piscis --input_dir <piscis dataset> --output_dir models/piscis --model_name my_finetuned
-#   sbatch --mem=128G bash_scripts/submit_finetuning.sh deepblink --config models/deepblink/config.yaml --input_dir <data.npz> --output_dir models/deepblink/finetuned
+#   sbatch bash_scripts/submit_finetuning.sh ufish --input_dir <train> --val_dir <val> --output_dir models/ufish/finetuned --base_model models/ufish/best_model.pth --lr 1e-5
+#   PISCIS_DIR=models/piscis sbatch bash_scripts/submit_finetuning.sh piscis --input_dir <piscis dataset> --output_dir models/piscis --base_model piscis_customed_512 --model_name my_finetuned
 # Optional for every tool: --epochs, --lr, --batch_size (tool default if omitted)
 
 set -eu
