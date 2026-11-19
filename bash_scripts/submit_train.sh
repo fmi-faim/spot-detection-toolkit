@@ -59,7 +59,7 @@ echo "[INFO] Starting training job $SLURM_JOB_ID"
 echo "[INFO] Tool: $TOOL (pixi environment: $PIXI_ENV)"
 echo "[INFO] Arguments: $*"
 
-pixi run -e "$PIXI_ENV" python src/spot_detection_benchmark/train.py \
+pixi run -e "$PIXI_ENV" python src/spot_detection_toolkit/train.py \
     --tool "$TOOL" \
     "$@"
 

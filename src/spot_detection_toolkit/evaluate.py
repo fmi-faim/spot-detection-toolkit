@@ -11,12 +11,12 @@ import numpy as np
 import pandas as pd
 import scipy.spatial
 
-from spot_detection_benchmark.evaluation_metrics import (
+from spot_detection_toolkit.evaluation_metrics import (
     EPS,
     f1_integral,
     linear_sum_assignment,
 )
-from spot_detection_benchmark.utils import MODES, load_coords, setup_logging, subset_of
+from spot_detection_toolkit.utils import MODES, load_coords, setup_logging, subset_of
 
 log = logging.getLogger(__name__)
 

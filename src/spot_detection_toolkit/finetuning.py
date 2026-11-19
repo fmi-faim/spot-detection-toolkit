@@ -4,13 +4,13 @@ import argparse
 from pathlib import Path
 from typing import Any
 
-from spot_detection_benchmark.detectors import default_model
-from spot_detection_benchmark.train import (
+from spot_detection_toolkit.detectors import default_model
+from spot_detection_toolkit.train import (
     add_training_args,
     tool_kwargs_from_args,
     train,
 )
-from spot_detection_benchmark.utils import setup_logging
+from spot_detection_toolkit.utils import setup_logging
 
 
 def _check_not_overwritten(base_model: str | Path, output_dir: str | Path) -> None:

@@ -6,11 +6,11 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-from spot_detection_benchmark.detectors import (
+from spot_detection_toolkit.detectors import (
     load_spotiflow,
     load_ufish_weights,
 )
-from spot_detection_benchmark.utils import (
+from spot_detection_toolkit.utils import (
     get_device,
     given_options,
     set_piscis_dir,

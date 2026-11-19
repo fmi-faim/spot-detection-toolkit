@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import tifffile
 
-from spot_detection_benchmark.detectors import (
+from spot_detection_toolkit.detectors import (
     TOOLS,
     Detector,
     detect,
@@ -20,13 +20,13 @@ from spot_detection_benchmark.detectors import (
     results_dirname,
     run_name,
 )
-from spot_detection_benchmark.evaluate import MIN_TRUE, evaluate_folder, summarize
-from spot_detection_benchmark.run_inference import (
+from spot_detection_toolkit.evaluate import MIN_TRUE, evaluate_folder, summarize
+from spot_detection_toolkit.run_inference import (
     add_detection_args,
     detector_kwargs_from_args,
     predict_folder,
 )
-from spot_detection_benchmark.utils import (
+from spot_detection_toolkit.utils import (
     list_images,
     setup_logging,
     subset_of,

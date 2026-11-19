@@ -15,7 +15,7 @@
 # Usage:
 # sbatch bash_scripts/submit_grid_search.sh <tool> --val_dir <dir> --gt_dir <dir> --output_root <dir> [grid_search.py options...]
 #
-# Every option of grid_search.py is passed through (python src/spot_detection_benchmark/grid_search.py -h):
+# Every option of grid_search.py is passed through (python src/spot_detection_toolkit/grid_search.py -h):
 #   --model <path|name>   --thresholds t1 t2 ...
 # Without --model each tool uses its own pretrained model, downloaded on first use.
 # Results go to <output_root>/<tool>_default/, <tool>_<model name>/ or log/.
@@ -61,7 +61,7 @@ echo "[INFO] Starting grid search job $SLURM_JOB_ID"
 echo "[INFO] Tool: $TOOL (pixi environment: $PIXI_ENV)"
 echo "[INFO] Arguments: $*"
 
-pixi run -e "$PIXI_ENV" python src/spot_detection_benchmark/grid_search.py \
+pixi run -e "$PIXI_ENV" python src/spot_detection_toolkit/grid_search.py \
     --tool "$TOOL" \
     "$@"
 

@@ -15,7 +15,7 @@
 # Usage:
 # sbatch bash_scripts/submit_run_inference.sh <tool> --input_dir <dir> --output_root <dir> [run_inference.py options...]
 #
-# Every option of run_inference.py is passed through (python src/spot_detection_benchmark/run_inference.py -h):
+# Every option of run_inference.py is passed through (python src/spot_detection_toolkit/run_inference.py -h):
 #   --model <path|name>   --threshold <value>
 # Without --model each tool uses its own pretrained model, downloaded on first use.
 # CSVs go to <output_root>/results_<tool>_default/, results_<tool>_<model name>/ or results_log/.
@@ -62,7 +62,7 @@ echo "[INFO] Starting inference job $SLURM_JOB_ID"
 echo "[INFO] Tool: $TOOL (pixi environment: $PIXI_ENV)"
 echo "[INFO] Arguments: $*"
 
-pixi run -e "$PIXI_ENV" python src/spot_detection_benchmark/run_inference.py \
+pixi run -e "$PIXI_ENV" python src/spot_detection_toolkit/run_inference.py \
     --tool "$TOOL" \
     "$@"
 

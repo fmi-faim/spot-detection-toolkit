@@ -19237,7 +19237,7 @@ packages:
   size: 387535
   timestamp: 1786599623274
 - pypi: ./
-  name: spot-detection-benchmark
+  name: spot-detection-toolkit
   requires_python: '>=3.12'
 - pypi: https://files.pythonhosted.org/packages/03/c1/0976b235cf29ead553e22f2fb6385a8252b533715e00d0ae52ed7b900582/h5py-3.16.0-cp312-cp312-win_amd64.whl
   name: h5py

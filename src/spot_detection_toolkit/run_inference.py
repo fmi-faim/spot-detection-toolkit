@@ -7,7 +7,7 @@ from typing import Any
 
 import tifffile
 
-from spot_detection_benchmark.detectors import (
+from spot_detection_toolkit.detectors import (
     TOOLS,
     Detector,
     detect,
@@ -15,7 +15,7 @@ from spot_detection_benchmark.detectors import (
     resolve_model,
     results_dirname,
 )
-from spot_detection_benchmark.utils import (
+from spot_detection_toolkit.utils import (
     MODES,
     given_options,
     list_images,

@@ -8,7 +8,7 @@ from typing import Any, Union
 import numpy as np
 import pandas as pd
 
-from spot_detection_benchmark.utils import MODES, get_device, set_piscis_dir
+from spot_detection_toolkit.utils import MODES, get_device, set_piscis_dir
 
 log = logging.getLogger(__name__)
 
@@ -184,7 +184,7 @@ class LoG:
         Returns:
             (coordinates (N, 2), None).
         """
-        from spot_detection_benchmark.log_detection import detect_spots_2d
+        from spot_detection_toolkit.log_detection import detect_spots_2d
 
         coords = detect_spots_2d(
             image, lateral_sigma=self.lateral_sigma, h=_sanitize_h(threshold, image)
@@ -203,7 +203,7 @@ class LoG:
         Returns:
             (coordinates (N, 3), None).
         """
-        from spot_detection_benchmark.log_detection import detect_spots
+        from spot_detection_toolkit.log_detection import detect_spots
 
         coords = detect_spots(
             volume,

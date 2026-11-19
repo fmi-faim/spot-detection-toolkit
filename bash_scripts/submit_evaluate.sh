@@ -35,6 +35,6 @@ fi
 echo "[INFO] Job ID: $SLURM_JOB_ID"
 echo "[INFO] Arguments: $*"
 
-pixi run -e default python src/spot_detection_benchmark/evaluate.py "$@"
+pixi run -e default python src/spot_detection_toolkit/evaluate.py "$@"
 
 echo "[INFO] Evaluation complete"

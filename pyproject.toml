@@ -1,6 +1,6 @@
 [project]
 dependencies = []
-name = "spot-detection-benchmark"
+name = "spot-detection-toolkit"
 requires-python = ">= 3.12"
 version = "0.1.0"
 
@@ -13,7 +13,7 @@ channels = ["conda-forge"]
 platforms = ["win-64","linux-64"]
 
 [tool.pixi.pypi-dependencies]
-spot_detection_benchmark = { path = ".", editable = true }
+spot_detection_toolkit = { path = ".", editable = true }
 
 [tool.pixi.environments]
 # Jupyter only where the notebooks run: default (Evaluation_grid_search) and napari
@@ -22,8 +22,6 @@ default = ["jupyter"]
 napari = ["napari", "jupyter"]
 ufish = ["ufish"]
 # ufish with CUDA PyTorch, for training, inference and grid
-# search on the cluster's GPUs (linux only, so the plain ufish environment stays
-# installable on Windows machines without GPU)
 ufish-gpu = ["ufish", "cuda"]
 piscis = ["piscis"]
 log = ["log"]
@@ -76,5 +74,5 @@ pytorch-gpu = "*"
 # the spotiflow environment leaves out the default feature, so the project's
 # package is installed in it explicitly
 [tool.pixi.feature.spotiflow.pypi-dependencies]
-spot_detection_benchmark = { path = ".", editable = true }
+spot_detection_toolkit = { path = ".", editable = true }
 

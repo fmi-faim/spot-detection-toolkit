@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from spot_detection_benchmark.utils import (
+from spot_detection_toolkit.utils import (
     list_images,
     setup_logging,
     subset_of,
