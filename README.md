@@ -1,4 +1,4 @@
-# spot-detection-benchmark
+# spot-detection-toolkit
 
 Benchmark and useful codes of four spot detectors for smFISH-like images: **Spotiflow**,
 **Piscis**, **U-FISH** and a classical **LoG** (Laplacian of Gaussian & h-maxima). 
@@ -25,11 +25,11 @@ pixi install --all
 Scripts are run from the repository root, in the tool's environment:
 
 ```bash
-pixi run -e spotiflow python src/spot_detection_benchmark/run_inference.py --tool spotiflow --input_dir datasets/train_val_test_split/test --output_root results/results_inference_ufish_dataset
+pixi run -e spotiflow python src/spot_detection_toolkit/run_inference.py --tool spotiflow --input_dir datasets/train_val_test_split/test --output_root results/results_inference_ufish_dataset
 ```
 
 ```bash
-pixi run python src/spot_detection_benchmark/evaluate.py --gt_dir datasets/train_val_test_split/test --pred_dir results/results_inference_ufish_dataset/results_spotiflow --output_dir results/metrics_inference_ufish_dataset/results_spotiflow
+pixi run python src/spot_detection_toolkit/evaluate.py --gt_dir datasets/train_val_test_split/test --pred_dir results/results_inference_ufish_dataset/results_spotiflow --output_dir results/metrics_inference_ufish_dataset/results_spotiflow
 ```
 
 `-h` on any script lists its options. On the cluster, the SLURM wrappers of `bash_scripts/` run the same
@@ -39,7 +39,7 @@ scripts.
 
 | folder | content |
 |---|---|
-| `src/spot_detection_benchmark/` | the code |
+| `src/spot_detection_toolkit/` | the code |
 | `models/` | models trained here (the default models are downloaded by each tool) |
 | `bash_scripts/` | SLURM wrappers and pixi installation |
 | `notebooks/` | analysis notebooks |
