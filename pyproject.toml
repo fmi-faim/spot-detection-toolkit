@@ -29,7 +29,7 @@ source = "vcs"
 
 [tool.pixi.workspace]
 channels = ["conda-forge"]
-platforms = ["win-64","linux-64", "osx-arm64"]
+platforms = ["win-64","linux-64", "osx-arm64", { name = "gpu-linux-64", platform = "linux-64", cuda = "12.0" }]
 
 [tool.pixi.pypi-dependencies]
 spot_detection_toolkit = { path = ".", editable = true }
@@ -57,6 +57,7 @@ test-spotiflow = { features = ["test", "spotiflow"], solve-group = "default" }
 test-all = { features = ["test", "piscis", "ufish", "spotiflow"], solve-group = "default" }
 jupyter = { features = ["jupyter"], solve-group = "default" }
 napari = { features = ["napari"], solve-group = "default" }
+ufish-gpu = ["cuda", "ufish"]
 
 [tool.pixi.environments.build]
 no-default-feature = true
@@ -90,6 +91,12 @@ jupyter = ">=1.1.1,<2"
 [tool.pixi.feature.napari.dependencies]
 napari = ">=0.7.0,<0.8"
 pyqt6 = ">=6.11.0,<7"
+
+[tool.pixi.feature.cuda]
+platforms = ["gpu-linux-64"]
+
+[tool.pixi.feature.cuda.target.gpu-linux-64.dependencies]
+pytorch-gpu = ">=2.13.0,<3"
 
 [dependency-groups]
 spotiflow = ["spotiflow>=0.6.5,<0.7"]
